@@ -1,0 +1,19 @@
+import { SearchX } from "lucide-react";
+import { Button, Logo } from "@/components/ui/ui";
+
+export default function NotFound() {
+  return (
+    <main className="grid min-h-dvh place-items-center px-6 text-center">
+      <div>
+        <Logo className="mb-10" />
+        <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-canvas-2 text-ink-mute"><SearchX className="h-8 w-8" /></span>
+        <h1 className="mt-6 text-4xl font-bold">Page not found</h1>
+        <p className="mx-auto mt-2 max-w-sm text-ink-mute">The page you’re looking for doesn’t exist or has moved.</p>
+        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <Button href="/" size="lg">Back to home</Button>
+          <Button href="/sponsor" size="lg" variant="outline">Open the app</Button>
+        </div>
+      </div>
+    </main>
+  );
+}

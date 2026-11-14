@@ -1,12 +1,5 @@
 import type { Config } from "tailwindcss";
 
-/**
- * CarePass design tokens
- * - brand:   medical teal, deepened so white text on brand-600 passes WCAG AA
- * - ink:     cool near-black text scale
- * - canvas:  cool off-white app background; surfaces are pure white
- * - sun / rose / iris: warning, danger, info
- */
 const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
@@ -21,66 +14,78 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          50: "#EBFAFA",
-          100: "#CFF3F3",
-          200: "#A0E6E6",
-          300: "#66D1D3",
-          400: "#2EB5BA",
-          500: "#0F9AA3",
-          600: "#0E7C86",
-          700: "#0F636C",
-          800: "#11505A",
-          900: "#0F3F48",
-          950: "#072A31",
+          50: "#E9F8F1",
+          100: "#CFF0E0",
+          200: "#A2E1C4",
+          300: "#6CCDA3",
+          400: "#2FB985",
+          500: "#00A86B",
+          600: "#00935D",
+          700: "#007A4D",
+          800: "#0A5F40",
+          900: "#0A3D2B",
+          950: "#052619",
         },
         ink: {
-          DEFAULT: "#0E1B2E",
-          soft: "#38465A",
-          mute: "#5A687B",
-          faint: "#8B97A7",
+          DEFAULT: "#10231C",
+          soft: "#3D5149",
+          mute: "#66766F",
+          faint: "#97A39D",
         },
-        canvas: { DEFAULT: "#F5F7FA", 2: "#EBEEF3", 3: "#DFE4EB" },
-        line: { DEFAULT: "#E3E8EF", strong: "#D0D7E1" },
-        sun: { 50: "#FFF6DD", 100: "#FFEBB0", 400: "#F2B133", 500: "#D99A14", 600: "#9A5F05", 700: "#7A4A02" },
-        rose: { 50: "#FDEDEA", 100: "#FAD3CD", 500: "#E0483A", 600: "#C93A2D", 700: "#A62E23" },
-        iris: { 50: "#EFEEFD", 100: "#DEDCFB", 500: "#6459EE", 600: "#5146D9", 700: "#4239B8" },
+        canvas: { DEFAULT: "#F4F2EB", 2: "#ECE9DF" },
+        line: { DEFAULT: "#E4E1D6", strong: "#D3CFC0" },
+        sun: { 50: "#FFF7E0", 100: "#FFEDB8", 400: "#F5B83D", 600: "#A86A06" },
+        rose: { 50: "#FDECEA", 100: "#FAD4CF", 500: "#E5594B", 700: "#B3352A" },
+        iris: { 50: "#EEEDFD", 500: "#6C63F0", 700: "#4A41C4" },
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans Variable"', "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        sans: ['"Plus Jakarta Sans Variable"', "system-ui", "sans-serif"],
         display: ['"Bricolage Grotesque Variable"', '"Plus Jakarta Sans Variable"', "system-ui", "sans-serif"],
-        mono: ['"JetBrains Mono Variable"', "ui-monospace", "SFMono-Regular", "monospace"],
+        mono: ['"JetBrains Mono Variable"', "ui-monospace", "monospace"],
       },
       boxShadow: {
-        xs: "0 1px 1px rgba(14,27,46,.04)",
-        card: "0 1px 2px rgba(14,27,46,.04), 0 1px 1px rgba(14,27,46,.03)",
-        raise: "0 1px 2px rgba(14,27,46,.05), 0 8px 24px -12px rgba(14,27,46,.16)",
-        pop: "0 2px 6px rgba(14,27,46,.06), 0 28px 64px -20px rgba(14,27,46,.32)",
-        glow: "0 14px 40px -10px rgba(14,124,134,.5)",
-        btn: "inset 0 1px 0 rgba(255,255,255,.16), 0 1px 2px rgba(7,42,49,.28)",
+        card: "0 1px 2px rgba(16,35,28,.04), 0 10px 28px -14px rgba(16,35,28,.14)",
+        pop: "0 2px 4px rgba(16,35,28,.05), 0 24px 56px -16px rgba(16,35,28,.28)",
+        glow: "0 12px 40px -8px rgba(0,168,107,.45)",
       },
       borderRadius: { "4xl": "2rem" },
       keyframes: {
-        "fade-up": { from: { opacity: "0", transform: "translateY(12px)" }, to: { opacity: "1", transform: "translateY(0)" } },
+        "fade-up": {
+          from: { opacity: "0", transform: "translateY(14px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
         "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
-        "scale-in": { from: { opacity: "0", transform: "scale(.96)" }, to: { opacity: "1", transform: "scale(1)" } },
-        "sheet-up": { from: { transform: "translateY(100%)" }, to: { transform: "translateY(0)" } },
-        "toast-in": { from: { opacity: "0", transform: "translateY(-10px) scale(.97)" }, to: { opacity: "1", transform: "translateY(0) scale(1)" } },
-        float: { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(-6px)" } },
-        ring: { "0%": { transform: "scale(.8)", opacity: ".5" }, "100%": { transform: "scale(1.8)", opacity: "0" } },
-        shake: { "0%,100%": { transform: "translateX(0)" }, "25%": { transform: "translateX(-6px)" }, "75%": { transform: "translateX(6px)" } },
-        pop: { "0%": { transform: "scale(.6)", opacity: "0" }, "60%": { transform: "scale(1.08)", opacity: "1" }, "100%": { transform: "scale(1)" } },
+        "scale-in": {
+          from: { opacity: "0", transform: "scale(.94)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
+        "sheet-up": {
+          from: { transform: "translateY(100%)" },
+          to: { transform: "translateY(0)" },
+        },
+        float: {
+          "0%,100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-8px)" },
+        },
+        ring: {
+          "0%": { transform: "scale(.8)", opacity: ".6" },
+          "100%": { transform: "scale(1.9)", opacity: "0" },
+        },
+        scan: {
+          "0%": { top: "6%" },
+          "50%": { top: "88%" },
+          "100%": { top: "6%" },
+        },
         draw: { to: { strokeDashoffset: "0" } },
       },
       animation: {
-        "fade-up": "fade-up .5s cubic-bezier(.2,.7,.2,1) both",
-        "fade-in": "fade-in .25s ease both",
-        "scale-in": "scale-in .22s cubic-bezier(.2,.8,.2,1) both",
-        "sheet-up": "sheet-up .32s cubic-bezier(.2,.8,.2,1) both",
-        "toast-in": "toast-in .26s cubic-bezier(.2,.8,.2,1) both",
+        "fade-up": "fade-up .55s cubic-bezier(.2,.7,.2,1) both",
+        "fade-in": "fade-in .3s ease both",
+        "scale-in": "scale-in .28s cubic-bezier(.2,.8,.2,1) both",
+        "sheet-up": "sheet-up .34s cubic-bezier(.2,.8,.2,1) both",
         float: "float 6s ease-in-out infinite",
-        ring: "ring 2.2s ease-out infinite",
-        shake: "shake .32s ease",
-        pop: "pop .45s cubic-bezier(.2,.9,.3,1.2) both",
+        ring: "ring 2s ease-out infinite",
+        scan: "scan 2.6s ease-in-out infinite",
         draw: "draw .6s .1s ease-out forwards",
       },
     },

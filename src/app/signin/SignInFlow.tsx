@@ -3,23 +3,18 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, BadgeCheck, Check, Landmark, Lock, Smartphone, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Landmark, Loader2, Smartphone } from "lucide-react";
 import clsx from "clsx";
 import { Button, Logo } from "@/components/ui/ui";
-import { Field } from "@/components/ui/forms";
-import { CareTimeline } from "@/components/CareTimeline";
-import { pkgOf } from "@/lib/care";
-import { formatNgPhone, phoneDigits } from "@/lib/format";
+import { PassCard } from "@/components/PassCard";
+import { authClient } from "@/lib/auth-client";
+import { useStore } from "@/lib/store";
 
 type Role = "sponsor" | "family";
 
-const ROLES = [
-  { id: "sponsor" as const, icon: Landmark, t: "I’m arranging care", d: "Fund and follow care for family" },
-  { id: "family" as const, icon: Smartphone, t: "I’m receiving care", d: "See my next step and visit code" },
-];
-
 export function SignInFlow() {
   const router = useRouter();
+  const { refresh } = useStore();
   const params = useSearchParams();
   const signup = params.get("mode") === "signup";
   const [role, setRole] = useState<Role>("sponsor");
@@ -28,10 +23,9 @@ export function SignInFlow() {
   const [id, setId] = useState("");
   const [code, setCode] = useState<string[]>(Array(6).fill(""));
   const [busy, setBusy] = useState(false);
-  const [ok, setOk] = useState(false);
   const [err, setErr] = useState("");
-  const [shake, setShake] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [demoCode, setDemoCode] = useState<string | null>(null);
   const refs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
@@ -40,27 +34,50 @@ export function SignInFlow() {
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const sponsor = role === "sponsor";
-  const emailOk = /^\S+@\S+\.\S+$/.test(id.trim());
-  const nameOk = name.trim().length > 1;
-  const phoneOk = phoneDigits(id).length >= 13; // +234 + 10 digits
-  const valid = sponsor ? emailOk && (!signup || nameOk) : phoneOk;
+  const email = id.trim().toLowerCase();
+  const valid = /^\S+@\S+\.\S+$/.test(email) && (!signup || name.trim().length > 1);
 
-  function sendCode(e: React.FormEvent) {
-    e.preventDefault();
-    if (!valid) {
-      setErr(sponsor ? (!emailOk ? "Enter a valid email address." : "Enter your full name.") : "Enter a valid Nigerian phone number.");
-      setShake(true); setTimeout(() => setShake(false), 400);
-      return;
-    }
-    setErr(""); setBusy(true);
-    setTimeout(() => { setBusy(false); setStep("otp"); setCooldown(30); setTimeout(() => refs.current[0]?.focus(), 60); }, 700);
+  async function requestCode() {
+    const { error } = await authClient.emailOtp.sendVerificationOtp({ email, type: "sign-in" });
+    if (error) { setErr(error.message ?? "Couldn't send the code. Try again."); return false; }
+    // Demo mode (no email provider yet): the server exposes the code so anyone can try the app.
+    try {
+      const r = await fetch(`/api/demo-otp?email=${encodeURIComponent(email)}`, { cache: "no-store" });
+      setDemoCode(r.ok ? ((await r.json()).otp as string | null) : null);
+    } catch { setDemoCode(null); }
+    return true;
   }
 
-  function verify(c = code) {
-    if (c.join("").length < 6 || busy) return;
-    setBusy(true);
-    setTimeout(() => { setOk(true); setTimeout(() => router.push(sponsor ? "/sponsor" : "/pass"), 650); }, 650);
+  async function sendCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!valid) return setErr(signup && name.trim().length < 2 ? "Enter your full name." : "Enter a valid email address.");
+    setErr(""); setBusy(true);
+    const ok = await requestCode();
+    setBusy(false);
+    if (ok) { setStep("otp"); setCooldown(30); setTimeout(() => refs.current[0]?.focus(), 50); }
+  }
+
+  async function resend() {
+    setErr(""); setCooldown(30);
+    await requestCode();
+  }
+
+  async function verify(c = code) {
+    const otp = c.join("");
+    if (otp.length < 6 || busy) return;
+    setBusy(true); setErr("");
+    const { error } = await authClient.signIn.emailOtp({ email, otp });
+    if (error) {
+      setBusy(false); setCode(Array(6).fill("")); refs.current[0]?.focus();
+      return setErr(/expired/i.test(error.message ?? "") ? "That code has expired. Request a new one." : "That code isn't right. Check it and try again.");
+    }
+    // First sign-in: record whether this is a sponsor or a family member. An existing account keeps its role.
+    const r = await fetch("/api/me/role", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, name: name.trim() }) });
+    const j = await r.json().catch(() => ({}));
+    const finalRole: Role = r.ok || r.status === 409 ? (j.role as Role) : role;
+    await refresh(); // load this account's data into the app before navigating
+    router.replace(params.get("next") && params.get("next")!.startsWith(finalRole === "sponsor" ? "/sponsor" : "/pass") ? params.get("next")! : finalRole === "sponsor" ? "/sponsor" : "/pass");
+    router.refresh();
   }
 
   function setDigit(i: number, v: string) {
@@ -77,99 +94,91 @@ export function SignInFlow() {
   }
 
   return (
-    <div className="grid min-h-dvh grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+    <div className="grid grid-cols-1 min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       {/* Brand panel */}
-      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-brand-800 to-brand-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
+      <aside className="relative hidden overflow-hidden bg-brand-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="grain absolute inset-0" />
-        <Link href="/" className="relative w-fit"><Logo light /></Link>
+        <div className="absolute -right-24 top-1/3 h-96 w-96 rounded-full bg-brand-500/25 blur-3xl" />
+        <Link href="/" className="relative"><Logo light /></Link>
         <div className="relative">
-          <div className="mx-auto mb-12 max-w-[380px] rounded-3xl bg-white p-6 text-ink shadow-pop">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <div className="text-sm font-bold">Diagnostic workup</div>
-                <div className="text-xs text-ink-mute">Lagoon Hospital, Ikeja</div>
-              </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-[11.5px] font-semibold text-brand-800"><BadgeCheck className="h-3.5 w-3.5" />Verified</span>
-            </div>
-            <CareTimeline steps={pkgOf("diagnostic").steps} done={3} compact />
-          </div>
-          <h2 className="max-w-md text-[40px] font-bold leading-[1.08]">Know the care happened.</h2>
-          <ul className="mt-6 max-w-md space-y-3 text-white/75">
-            {[[Wallet, "Pay only as each step is confirmed"], [Lock, "Medical details stay private"], [BadgeCheck, "Vetted providers in Lagos and Abuja"]].map(([I, t]) => {
-              const Icon = I as typeof Wallet;
-              return <li key={t as string} className="flex items-center gap-3"><Icon className="h-[18px] w-[18px] text-brand-300" />{t as string}</li>;
-            })}
-          </ul>
+          <div className="mx-auto mb-12 max-w-[360px] -rotate-3"><PassCard name="Adebola Okonkwo" balance={186.4} last4="8842" /></div>
+          <h2 className="max-w-md text-4xl font-extrabold leading-tight">Every dollar you send reaches care.</h2>
+          <p className="mt-4 max-w-md text-white/60">Locked to verified providers, non-custodial and fully visible to you.</p>
         </div>
-        <div className="relative text-sm text-white/40">© 2026 CarePass · Demo prototype</div>
+        <div className="relative text-sm text-white/40">© 2026 CarePass · Running on Stellar testnet</div>
       </aside>
 
       <main className="flex flex-col px-5 pb-8 pt-5 sm:px-10">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="lg:hidden" aria-label="CarePass home"><Logo /></Link>
-          <Link href="/" className="ml-auto inline-flex h-10 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-ink-soft hover:bg-canvas-2"><ArrowLeft className="h-4 w-4" />Back to site</Link>
+        <div className="flex items-center justify-between lg:justify-end">
+          <Link href="/" className="lg:hidden"><Logo /></Link>
+          <Link href="/" className="rounded-xl px-3 py-2 text-sm font-semibold text-ink-soft hover:bg-canvas-2">← Back to site</Link>
         </div>
 
-        <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-8">
+        <div className="mx-auto flex w-full max-w-[420px] flex-1 flex-col justify-center py-8">
           {step === "id" ? (
-            <form onSubmit={sendCode} noValidate className="animate-fade-up">
-              <h1 className="text-[32px] font-bold leading-tight sm:text-[36px]">{signup ? "Create your account" : "Welcome back"}</h1>
-              <p className="mt-2 text-ink-mute">{signup ? "Start arranging care for your family in minutes." : "Sign in to continue to CarePass."}</p>
+            <form onSubmit={sendCode} className="animate-fade-up">
+              <h1 className="text-[34px] font-extrabold leading-tight">{signup ? "Create your account" : "Welcome back"}</h1>
+              <p className="mt-2 text-ink-mute">{signup ? "Start funding care for your family in minutes." : "Sign in to continue to CarePass."}</p>
 
-              <div className="mt-8 grid grid-cols-2 gap-3" role="radiogroup" aria-label="I am">
-                {ROLES.map((r) => (
-                  <button key={r.id} type="button" role="radio" aria-checked={role === r.id} onClick={() => { setRole(r.id); setId(""); setErr(""); }}
-                    className={clsx("rounded-2xl border p-4 text-left transition", role === r.id ? "border-brand-600 bg-brand-50/70 shadow-[0_0_0_3px_rgba(15,154,163,.14)]" : "border-line bg-white hover:border-line-strong")}>
-                    <span className={clsx("grid h-9 w-9 place-items-center rounded-lg", role === r.id ? "bg-brand-600 text-white" : "bg-canvas-2 text-ink-soft")}><r.icon className="h-[18px] w-[18px]" /></span>
-                    <span className="mt-3 block text-[13.5px] font-bold leading-tight">{r.t}</span>
-                    <span className="mt-1 block text-xs leading-snug text-ink-mute">{r.d}</span>
+              <div className="mt-8 grid grid-cols-2 gap-2 rounded-2xl bg-canvas-2 p-1.5" role="tablist" aria-label="I am a">
+                {([["sponsor", "I'm sending support", Landmark], ["family", "I'm receiving care", Smartphone]] as const).map(([r, l, I]) => (
+                  <button key={r} type="button" role="tab" aria-selected={role === r} onClick={() => { setRole(r); setErr(""); }}
+                    className={clsx("flex flex-col items-center gap-1.5 rounded-xl px-2 py-3.5 text-[13px] font-bold transition", role === r ? "bg-white text-ink shadow-card" : "text-ink-mute hover:text-ink")}>
+                    <I className={clsx("h-5 w-5", role === r && "text-brand-600")} />{l}
                   </button>
                 ))}
               </div>
 
-              <div className={clsx("mt-6 space-y-5", shake && "animate-shake")}>
-                {signup && sponsor && (
-                  <Field label="Full name" value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} autoComplete="name" placeholder="e.g. Tunde Okonkwo" />
-                )}
-                {sponsor ? (
-                  <Field label="Email address" value={id} onChange={(e) => { setId(e.target.value); setErr(""); }} type="email" inputMode="email" autoComplete="email" placeholder="you@example.com" error={err} />
-                ) : (
-                  <Field label="Phone number" value={id} onChange={(e) => { setId(formatNgPhone(e.target.value)); setErr(""); }} type="tel" inputMode="tel" autoComplete="tel" placeholder="+234 802 555 0142" error={err} hint="We’ll text you a 6-digit code." />
-                )}
-              </div>
+              {signup && (
+                <label className="mt-6 block">
+                  <span className="text-sm font-semibold">Full name</span>
+                  <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="e.g. Tunde Okonkwo"
+                    className="mt-2 h-[52px] w-full rounded-2xl border border-line-strong bg-white px-4 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15" />
+                </label>
+              )}
+              <label className="mt-5 block">
+                <span className="text-sm font-semibold">Email address</span>
+                <input value={id} onChange={(e) => { setId(e.target.value); setErr(""); }} inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false}
+                  placeholder="you@example.com"
+                  className={clsx("mt-2 h-[52px] w-full rounded-2xl border bg-white px-4 outline-none transition focus:ring-4", err ? "border-rose-500 focus:ring-rose-500/15" : "border-line-strong focus:border-brand-500 focus:ring-brand-500/15")} />
+                {err && <span className="mt-2 block text-sm font-medium text-rose-700">{err}</span>}
+              </label>
 
-              <Button type="submit" size="lg" full className="mt-6" loading={busy}>Continue <ArrowRight className="h-5 w-5" /></Button>
-              <p className="mt-6 text-center text-sm text-ink-mute">
+              <Button type="submit" size="lg" full className="mt-6" disabled={busy}>
+                {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <>Continue <ArrowRight className="h-5 w-5" /></>}
+              </Button>
+              <p className="mt-5 text-center text-sm text-ink-mute">
                 {signup ? "Already have an account? " : "New to CarePass? "}
                 <Link href={signup ? "/signin" : "/signin?mode=signup"} className="font-bold text-brand-700 hover:underline">{signup ? "Sign in" : "Create an account"}</Link>
-              </p>
-              <p className="mt-3 text-center text-sm text-ink-mute">
-                Work at a hospital or lab? <Link href="/provider" className="font-bold text-brand-700 hover:underline">Open the provider desk</Link>
               </p>
             </form>
           ) : (
             <div className="animate-fade-up">
-              <button onClick={() => { setStep("id"); setCode(Array(6).fill("")); setBusy(false); setOk(false); }} className="mb-6 inline-flex h-9 items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"><ArrowLeft className="h-4 w-4" />Back</button>
-              <h1 className="text-[32px] font-bold leading-tight sm:text-[36px]">Check your {sponsor ? "inbox" : "messages"}</h1>
-              <p className="mt-2 text-ink-mute">We sent a 6-digit code to <strong className="font-semibold text-ink">{id}</strong>.</p>
+              <button onClick={() => { setStep("id"); setCode(Array(6).fill("")); setErr(""); setDemoCode(null); }} className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"><ArrowLeft className="h-4 w-4" /> Back</button>
+              <h1 className="text-[34px] font-extrabold leading-tight">Check your inbox</h1>
+              <p className="mt-2 text-ink-mute">We sent a 6-digit code to <strong className="text-ink">{id}</strong>.</p>
 
-              <div className="mt-8 flex justify-between gap-2 sm:gap-2.5" onPaste={(e) => { e.preventDefault(); setDigit(0, e.clipboardData.getData("text")); }}>
+              <div className="mt-8 flex justify-between gap-2" onPaste={(e) => { e.preventDefault(); setDigit(0, e.clipboardData.getData("text")); }}>
                 {code.map((c, i) => (
-                  <input key={i} ref={(el) => { refs.current[i] = el; }} value={c} inputMode="numeric" autoComplete={i === 0 ? "one-time-code" : "off"} maxLength={6} aria-label={`Digit ${i + 1}`} disabled={busy || ok}
+                  <input key={i} ref={(el) => { refs.current[i] = el; }} value={c} inputMode="numeric" autoComplete={i === 0 ? "one-time-code" : "off"} maxLength={6} aria-label={`Digit ${i + 1}`}
                     onChange={(e) => setDigit(i, e.target.value)}
                     onKeyDown={(e) => e.key === "Backspace" && !code[i] && i > 0 && refs.current[i - 1]?.focus()}
-                    className={clsx("h-[60px] w-full min-w-0 rounded-xl border bg-white text-center font-display text-2xl font-bold outline-none transition focus:border-brand-600 focus:ring-4 focus:ring-brand-500/15 disabled:opacity-70",
-                      c ? "border-ink-faint" : "border-line-strong")} />
+                    className="h-[60px] w-full min-w-0 rounded-2xl border border-line-strong bg-white text-center font-display text-2xl font-bold outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15" />
                 ))}
               </div>
-              <p className="mt-4 flex items-center gap-2 rounded-xl bg-sun-50 px-3.5 py-2.5 text-[13px] font-medium text-sun-700"><Check className="h-4 w-4 shrink-0" />Demo: enter any 6 digits to continue.</p>
+              {demoCode && (
+                <div className="mt-4 rounded-xl bg-sun-50 px-3.5 py-3 text-[13px] font-medium text-sun-600">
+                  <div className="flex items-center gap-2"><Check className="h-4 w-4 shrink-0" /> Demo mode: email delivery isn't connected yet.</div>
+                  <button type="button" onClick={() => { const d = demoCode.split(""); setCode(d); void verify(d); }} className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 font-mono text-base font-bold tracking-[0.3em] text-ink shadow-card">{demoCode}<span className="font-sans text-xs font-bold tracking-normal text-brand-700">Use code</span></button>
+                </div>
+              )}
+              {err && <p role="alert" className="mt-4 text-sm font-medium text-rose-700">{err}</p>}
 
-              <Button size="lg" full className="mt-6" loading={busy && !ok} disabled={code.join("").length < 6 || ok} onClick={() => verify()}
-                icon={ok ? <Check className="h-5 w-5" /> : undefined}>
-                {ok ? "Verified" : "Verify & continue"}
+              <Button size="lg" full className="mt-6" disabled={busy || code.join("").length < 6} onClick={() => verify()}>
+                {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Verify & continue"}
               </Button>
               <p className="mt-5 text-center text-sm text-ink-mute">
-                {cooldown > 0 ? `Resend code in ${cooldown}s` : <button onClick={() => setCooldown(30)} className="font-bold text-brand-700 hover:underline">Resend code</button>}
+                {cooldown > 0 ? `Resend code in ${cooldown}s` : <button onClick={resend} className="font-bold text-brand-700 hover:underline">Resend code</button>}
               </p>
             </div>
           )}

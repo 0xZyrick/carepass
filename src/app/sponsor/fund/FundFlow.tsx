@@ -1,215 +1,248 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { ArrowLeft, ArrowRight, Banknote, Check, CreditCard, Lock, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { ArrowLeft, ArrowRight, Building, Check, CreditCard, ExternalLink, Loader2, Lock, ShieldCheck, Wallet, X } from "lucide-react";
 import clsx from "clsx";
-import { Avatar, Button, Empty, PageHeader, PkgIcon, Row } from "@/components/ui/ui";
-import { ChoiceCard, Stepper } from "@/components/ui/forms";
+import { Avatar, Button } from "@/components/ui/ui";
+import { PassCard } from "@/components/PassCard";
 import { useStore } from "@/lib/store";
-import { CareEpisode, isClosed, payableSteps, pkgOf, stepPayout } from "@/lib/care";
-import { merchantOf } from "@/lib/data";
-import { MIN_FUND, fundingFee, fxLabel, ngn, usd } from "@/lib/format";
+import { FX_RATE, fundingFee, ngn, usd } from "@/lib/format";
 
-const MAX_FUND = 10000;
-const STEPS = ["Care", "Amount", "Review"];
 const METHODS = [
-  { id: "Visa •••• 4242", t: "Visa •••• 4242", d: "Instant · no extra fee", icon: CreditCard },
-  { id: "Bank transfer", t: "Bank transfer", d: "1–2 business days", icon: Banknote },
+  { id: "Visa •••• 4242", title: "Visa •••• 4242", sub: "Instant · Debit card", icon: CreditCard },
+  { id: "Bank transfer", title: "Bank transfer", sub: "Faster Payments · Usually under 1 hour", icon: Building },
+  { id: "USDC wallet", title: "USDC wallet", sub: "Pay directly from your wallet", icon: Wallet },
 ];
+const PRESETS = [25, 50, 100, 200, 300];
+const STEPS = ["Who", "Amount", "Review"];
 
 export function FundFlow() {
+  const router = useRouter();
   const q = useSearchParams();
-  const { episodes, beneficiaries, fundEpisode, toast } = useStore();
-  const open = episodes.filter((e) => !isClosed(e));
-  const wanted = open.find((e) => e.id === q.get("care")) ?? open.find((e) => e.beneficiaryId === q.get("to"));
-  const preselected = !!wanted;
-
-  const [id, setId] = useState(wanted?.id ?? (open.length === 1 ? open[0].id : ""));
-  const [step, setStep] = useState(preselected || open.length === 1 ? 1 : 0);
-  const [amt, setAmt] = useState("");
+  const { beneficiaries, topUp, setActivePassId, fundingProvider, startFunding, syncFunding, toast } = useStore();
+  const live = fundingProvider === "moonpay";
+  const [waiting, setWaiting] = useState<{ id: string; url: string } | null>(null);
+  const initial = beneficiaries.find((b) => b.id === q.get("to"));
+  const [step, setStep] = useState(initial ? 1 : 0);
+  const [toId, setToId] = useState(initial?.id ?? "");
+  const [amountStr, setAmountStr] = useState(q.get("amount") ?? "100");
   const [method, setMethod] = useState(METHODS[0].id);
   const [busy, setBusy] = useState(false);
-  const [receipt, setReceipt] = useState<{ ref: string; fee: number; amount: number; ep: CareEpisode; method: string } | null>(null);
+  const [done, setDone] = useState<{ ref: string } | null>(null);
 
-  const ep = open.find((e) => e.id === id);
-  const p = ep && pkgOf(ep.packageId);
-  const who = (bid: string) => beneficiaries.find((b) => b.id === bid);
-  const amount = Math.round((parseFloat(amt) || 0) * 100) / 100;
+  const to = beneficiaries.find((b) => b.id === toId);
+  const amount = Math.max(0, parseFloat(amountStr) || 0);
   const fee = fundingFee(amount);
-  const tooLow = amt !== "" && amount < MIN_FUND;
-  const tooHigh = amount > MAX_FUND;
-  const amountOk = amount >= MIN_FUND && !tooHigh;
-  const perStep = p ? +(amount / payableSteps(p)).toFixed(2) : 0;
+  const total = amount + fee;
+  const minAmt = live ? 20 : 10;
+  const amountErr = amount < minAmt ? `Minimum top-up is $${minAmt}` : amount > 1000 ? "Maximum top-up is $1,000" : "";
 
-  function go(n: number) { setStep(n); window.scrollTo({ top: 0, behavior: "smooth" }); }
-  function pay() {
-    if (!ep || !amountOk) return;
+  // MoonPay: open the hosted checkout, then watch for it to complete. The pass is credited by the server.
+  async function startCheckout() {
+    if (!to) return;
     setBusy(true);
-    setTimeout(() => {
-      const r = fundEpisode(ep.id, amount, method);
-      setBusy(false);
-      if (!r) return toast("Something went wrong. Please try again.", "warn");
-      setReceipt({ ref: r.ref, fee: r.fee, amount, ep, method });
-      window.scrollTo({ top: 0 });
-    }, 900);
+    const win = window.open("", "_blank"); // opened first so the browser doesn't block it
+    const f = await startFunding(to.id, amount);
+    setBusy(false);
+    if (!f) { win?.close(); return; }
+    if (win) win.location.href = f.url;
+    setWaiting(f);
+  }
+
+  useEffect(() => {
+    if (!waiting) return;
+    let alive = true;
+    const tick = async () => { if (await syncFunding(waiting.id) && alive) { setDone({ ref: "MP-" + waiting.id.slice(0, 6).toUpperCase() }); setWaiting(null); } };
+    const t = setInterval(tick, 4000);
+    return () => { alive = false; clearInterval(t); };
+  }, [waiting, syncFunding]);
+
+  async function pay() {
+    if (!to) return;
+    setBusy(true);
+    const [tx] = await Promise.all([topUp(to.id, amount, method), new Promise((r) => setTimeout(r, 900))]);
+    setBusy(false);
+    if (tx) setDone({ ref: tx.ref });
+  }
+
+  /* ---------- Waiting for MoonPay ---------- */
+  if (waiting && to) {
+    return (
+      <div className="mx-auto max-w-md animate-fade-up py-8 text-center">
+        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand-50 text-brand-700"><Loader2 className="h-8 w-8 animate-spin" /></span>
+        <h1 className="mt-6 text-3xl font-extrabold">Finish in the MoonPay window</h1>
+        <p className="mt-3 text-ink-mute">Complete the purchase there. This page updates on its own the moment MoonPay confirms, and {to.name}'s pass is credited.</p>
+        <div className="mt-6 rounded-2xl bg-sun-50 p-4 text-left text-[13px] font-medium text-sun-600">
+          Sandbox: use test card <span className="font-mono font-bold">4000 0200 0000 0000</span> (US) or <span className="font-mono font-bold">4242 4242 4242 4242</span> (UK), any future expiry and any 3-digit CVV. Nothing is charged.
+        </div>
+        <div className="mt-6 grid gap-3">
+          <Button size="lg" full variant="outline" icon={<ExternalLink className="h-4 w-4" />} onClick={() => window.open(waiting.url, "_blank")}>Reopen MoonPay</Button>
+          <Button size="lg" full variant="ghost" onClick={async () => { const ok = await syncFunding(waiting.id); if (ok) { setDone({ ref: "MP-" + waiting.id.slice(0, 6).toUpperCase() }); setWaiting(null); } else toast("Not confirmed yet. Give it a few seconds.", "warn"); }}>I've finished, check now</Button>
+          <button onClick={() => setWaiting(null)} className="text-sm font-semibold text-ink-mute hover:text-ink">Cancel</button>
+        </div>
+      </div>
+    );
   }
 
   /* ---------- Success ---------- */
-  if (receipt) {
-    const rp = pkgOf(receipt.ep.packageId), rb = who(receipt.ep.beneficiaryId), rm = merchantOf(receipt.ep.providerId);
-    const total = +(receipt.amount + receipt.fee).toFixed(2);
+  if (done && to) {
     return (
-      <div className="mx-auto max-w-md animate-fade-up pt-2 text-center sm:pt-8">
-        <span className="mx-auto grid h-16 w-16 animate-pop place-items-center rounded-full bg-brand-600 text-white shadow-glow"><Check className="h-8 w-8" strokeWidth={3} /></span>
-        <h1 className="num mt-6 text-4xl font-bold">{usd(receipt.amount)} funded</h1>
-        <p className="mt-2 text-ink-mute">It’s held for {rb?.name}’s {rp.name.toLowerCase()} and released as each step is confirmed.</p>
-        <div className="card mt-8 divide-y divide-line px-5 text-left">
-          <Row label="Reference" value={<span className="font-mono text-[13px]">{receipt.ref}</span>} />
-          <Row label="Care" value={`${rp.name} · ${rb?.name}`} />
-          <Row label="Provider" value={rm?.name} />
-          <Row label="Paid with" value={receipt.method} />
-          <Row label="Amount held" value={usd(receipt.amount)} />
-          <Row label="Fee" value={usd(receipt.fee)} />
-          <Row label="Total charged" value={usd(total)} strong />
+      <div className="mx-auto max-w-md animate-fade-up py-6 text-center">
+        <div className="relative mx-auto grid h-24 w-24 place-items-center">
+          <span className="absolute inset-0 animate-ring rounded-full bg-brand-500/40" />
+          <span className="relative grid h-24 w-24 place-items-center rounded-full bg-brand-500 text-white shadow-glow">
+            <svg viewBox="0 0 24 24" className="h-11 w-11" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12.5l4.5 4.5L19 7.5" strokeDasharray="24" strokeDashoffset="24" className="animate-draw" />
+            </svg>
+          </span>
         </div>
-        <div className="mt-8 flex flex-col gap-3">
-          <Button href={`/sponsor/care/${receipt.ep.id}`} size="lg" full>Track this care</Button>
-          <Button href="/sponsor" variant="ghost" size="lg" full>Back to overview</Button>
+        <h1 className="mt-7 text-3xl font-extrabold">{usd(amount)} sent to {to.name}</h1>
+        <p className="mt-2 text-ink-mute">{to.name}'s care credit is available right now — {ngn(amount)} for hospitals, labs and pharmacies.</p>
+        <div className="mx-auto mt-7 max-w-[320px]"><PassCard name={to.fullName} balance={to.balance} last4={to.last4} hue={to.hue} compact /></div>
+        <dl className="mt-7 divide-y divide-line rounded-2xl border border-line bg-white text-left text-sm">
+          {[["Reference", done.ref], ["Paid with", live ? "MoonPay (sandbox)" : method], ["Total charged", usd(total)]].map(([k, v]) => (
+            <div key={k} className="flex justify-between px-4 py-3"><dt className="text-ink-mute">{k}</dt><dd className="font-semibold">{v}</dd></div>
+          ))}
+        </dl>
+        <div className="mt-7 grid gap-3">
+          <Button size="lg" full onClick={() => router.push("/sponsor")}>Back to overview</Button>
+          <Button size="lg" full variant="outline" onClick={() => { setActivePassId(to.id); router.push("/pass"); }}>See it on {to.name}'s pass</Button>
         </div>
       </div>
     );
   }
 
-  if (open.length === 0)
-    return (
-      <div className="card mx-auto mt-4 max-w-lg">
-        <Empty icon={<ShieldCheck />} title="Nothing to fund yet" sub="Start a care package first. Then you can fund it and follow each step." action={<Button href="/sponsor/care/new">Start a care package</Button>} />
-      </div>
-    );
-
-  const backStep = step === 1 && (preselected || open.length === 1) ? null : step - 1;
-
   return (
-    <div className="mx-auto max-w-2xl">
-      <PageHeader title="Fund care" sub="Money is held against the package and released as the provider confirms each step." />
-      <Stepper steps={STEPS} current={step} />
+    <div className="mx-auto max-w-4xl">
+      {/* header */}
+      <div className="mb-8 flex items-center justify-between gap-4">
+        <button onClick={() => (step === 0 ? router.push("/sponsor") : setStep(step - 1))} className="flex h-11 items-center gap-2 rounded-xl pr-3 text-sm font-semibold text-ink-soft hover:text-ink" aria-label="Back">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-white shadow-card"><ArrowLeft className="h-5 w-5" /></span>
+          <span className="hidden sm:inline">Back</span>
+        </button>
+        <ol className="flex flex-1 items-center justify-center gap-2 sm:gap-3" aria-label="Progress">
+          {STEPS.map((s, i) => (
+            <li key={s} className="flex items-center gap-2 sm:gap-3">
+              <span className={clsx("grid h-8 w-8 place-items-center rounded-full text-[13px] font-bold transition", i < step ? "bg-brand-500 text-white" : i === step ? "bg-ink text-white" : "bg-canvas-2 text-ink-faint")}>
+                {i < step ? <Check className="h-4 w-4" strokeWidth={3} /> : i + 1}
+              </span>
+              <span className={clsx("text-sm font-semibold", i === step ? "text-ink" : "hidden text-ink-faint sm:inline")}>{s}</span>
+              {i < 2 && <span className="h-px w-5 bg-line-strong sm:w-10" />}
+            </li>
+          ))}
+        </ol>
+        <Link href="/sponsor" aria-label="Cancel" className="grid h-10 w-10 place-items-center rounded-full text-ink-soft hover:bg-canvas-2"><X className="h-5 w-5" /></Link>
+      </div>
 
-      {/* ---------- 1. Choose care ---------- */}
-      {step === 0 && (
-        <section className="animate-fade-in" aria-label="Choose care">
-          <h2 className="mb-4 text-xl font-bold">Which care are you funding?</h2>
-          <div role="radiogroup" aria-label="Care package" className="space-y-3">
-            {open.map((e) => {
-              const b = who(e.beneficiaryId), pk = pkgOf(e.packageId);
-              return (
-                <ChoiceCard key={e.id} selected={id === e.id} onSelect={() => { setId(e.id); setAmt(""); }}>
-                  <div className="flex items-center gap-3.5 pr-8">
-                    {b && <Avatar initials={b.initials} hue={b.hue} size={46} />}
-                    <div className="min-w-0">
-                      <div className="truncate font-bold">{pk.name} for {b?.name}</div>
-                      <div className="text-[13px] text-ink-mute">{merchantOf(e.providerId)?.name} · funded so far <span className="num font-semibold text-ink">{usd(e.funded)}</span></div>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <div className="animate-fade-in" key={step}>
+          {step === 0 && (
+            <>
+              <h1 className="text-3xl font-extrabold sm:text-4xl">Who are you funding?</h1>
+              <p className="mt-2 text-ink-mute">Choose the family member who needs care credit.</p>
+              <div className="mt-7 space-y-3" role="radiogroup" aria-label="Beneficiary">
+                {beneficiaries.map((b) => (
+                  <button key={b.id} role="radio" aria-checked={toId === b.id} onClick={() => setToId(b.id)}
+                    className={clsx("flex w-full items-center gap-4 rounded-3xl border-2 bg-white p-4 text-left transition sm:p-5", toId === b.id ? "border-brand-500 ring-4 ring-brand-500/10" : "border-line hover:border-line-strong")}>
+                    <Avatar initials={b.initials} hue={b.hue} size={52} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-bold">{b.fullName}</div>
+                      <div className="text-sm text-ink-mute">{b.relation} · {b.city} · Balance {usd(b.balance)}</div>
                     </div>
-                  </div>
-                </ChoiceCard>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* ---------- 2. Amount ---------- */}
-      {step === 1 && ep && p && (
-        <section className="animate-fade-in" aria-label="Amount">
-          <div className="card mb-6 flex items-center gap-3.5 p-4">
-            <PkgIcon id={p.icon} size={42} />
-            <div className="min-w-0 flex-1"><div className="truncate font-bold">{p.name} for {who(ep.beneficiaryId)?.name}</div><div className="text-[13px] text-ink-mute">Typical band {usd(p.price[0], 0)} – {usd(p.price[1], 0)} · funded so far {usd(ep.funded)}</div></div>
-          </div>
-
-          <label htmlFor="amt" className="text-sm font-semibold">How much would you like to add?</label>
-          <div className={clsx("mt-2 flex h-[72px] items-center rounded-2xl border bg-white px-5 transition focus-within:ring-4", tooLow || tooHigh ? "border-rose-500 focus-within:ring-rose-500/15" : "border-line-strong focus-within:border-brand-600 focus-within:ring-brand-500/15")}>
-            <span className="num text-3xl font-bold text-ink-faint">$</span>
-            <input id="amt" value={amt} inputMode="decimal" autoComplete="off" placeholder="0.00" aria-invalid={tooLow || tooHigh || undefined} aria-describedby="amt-d"
-              onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1").replace(/^(\d*\.\d{0,2}).*$/, "$1"); setAmt(v); }}
-              className="num h-full min-w-0 flex-1 bg-transparent px-2 text-4xl font-bold outline-none placeholder:text-canvas-3" />
-            <span className="text-sm font-semibold text-ink-mute">USD</span>
-          </div>
-          <p id="amt-d" className={clsx("mt-2 text-[13px]", tooLow || tooHigh ? "font-medium text-rose-700" : "text-ink-mute")}>
-            {tooLow ? `The minimum is ${usd(MIN_FUND, 0)}.` : tooHigh ? `The maximum is ${usd(MAX_FUND, 0)} per payment.` : amountOk ? `Provider receives about ${ngn(amount)} (${fxLabel()}).` : `Minimum ${usd(MIN_FUND, 0)}.`}
-          </p>
-
-          <div className="mt-5 grid grid-cols-3 gap-2.5">
-            {[["Lower end", p.price[0]], ["Typical", Math.round((p.price[0] + p.price[1]) / 2)], ["Full package", p.price[1]]].map(([l, v]) => (
-              <button key={l as string} type="button" onClick={() => setAmt(String(v))}
-                className={clsx("rounded-xl border p-3 text-left transition", amt === String(v) ? "border-brand-600 bg-brand-50 shadow-[0_0_0_3px_rgba(15,154,163,.14)]" : "border-line bg-white hover:border-line-strong")}>
-                <div className="text-[11.5px] font-semibold text-ink-mute">{l as string}</div>
-                <div className="num text-lg font-bold">{usd(v as number, 0)}</div>
-              </button>
-            ))}
-          </div>
-
-          {amountOk && (
-            <div className="mt-6 flex animate-fade-in items-start gap-3 rounded-xl bg-canvas-2/70 p-4 text-[13px] leading-relaxed text-ink-soft">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-              <span>This releases about <b className="num">{usd(perStep)}</b> to the provider for each of the {payableSteps(p)} steps, only after each is confirmed.</span>
-            </div>
+                    <span className={clsx("grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 transition", toId === b.id ? "border-brand-500 bg-brand-500 text-white" : "border-line-strong")}>
+                      {toId === b.id && <Check className="h-3.5 w-3.5" strokeWidth={3.5} />}
+                    </span>
+                  </button>
+                ))}
+                <Link href="/sponsor/family/new" className="flex items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-line-strong p-4 text-sm font-semibold text-ink-mute transition hover:border-brand-500 hover:text-brand-700">+ Add someone new</Link>
+              </div>
+            </>
           )}
-        </section>
-      )}
 
-      {/* ---------- 3. Review ---------- */}
-      {step === 2 && ep && p && (
-        <section className="animate-fade-in" aria-label="Review">
-          <h2 className="mb-4 text-xl font-bold">Review and pay</h2>
-          <div className="card divide-y divide-line px-5">
-            <Row label="Care" value={`${p.name} · ${who(ep.beneficiaryId)?.name}`} />
-            <Row label="Held for care" value={usd(amount)} />
-            <Row label={`Funding fee (1%, min ${usd(0.5)})`} value={usd(fee)} />
-            <Row label="You pay" value={usd(amount + fee)} strong />
-            <Row label={`Provider receives (approx.)`} value={ngn(amount)} mute />
-          </div>
-
-          <h3 className="mb-3 mt-7 font-bold">Pay with</h3>
-          <div role="radiogroup" aria-label="Payment method" className="space-y-3">
-            {METHODS.map((m) => (
-              <ChoiceCard key={m.id} selected={method === m.id} onSelect={() => setMethod(m.id)}>
-                <div className="flex items-center gap-3.5 pr-8">
-                  <span className="grid h-10 w-10 place-items-center rounded-lg bg-canvas text-ink-soft"><m.icon className="h-5 w-5" /></span>
-                  <div><div className="font-bold">{m.t}</div><div className="text-[13px] text-ink-mute">{m.d}</div></div>
+          {step === 1 && to && (
+            <>
+              <h1 className="text-3xl font-extrabold sm:text-4xl">How much for {to.name}?</h1>
+              <p className="mt-2 text-ink-mute">You'll see the exact fee and Naira value before paying.</p>
+              <div className="card mt-7 p-6 text-center sm:p-8">
+                <label className="eyebrow" htmlFor="amt">Amount (USD)</label>
+                <div className="mt-3 flex items-center justify-center gap-1">
+                  <span className="num text-5xl font-extrabold text-ink-faint sm:text-6xl">$</span>
+                  <input id="amt" inputMode="decimal" value={amountStr} aria-invalid={!!amountErr} onChange={(e) => setAmountStr(e.target.value.replace(/[^\d.]/g, "").slice(0, 7))}
+                    className="num w-[7ch] max-w-full bg-transparent text-center text-5xl font-extrabold outline-none sm:text-6xl" style={{ width: `${Math.max(2, amountStr.length + 1)}ch` }} />
                 </div>
-              </ChoiceCard>
-            ))}
+                <div className="mt-2 text-lg font-semibold text-brand-700">≈ {ngn(amount)}</div>
+                {amountErr && <p className="mt-2 text-sm font-medium text-rose-700">{amountErr}</p>}
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  {PRESETS.map((p) => (
+                    <button key={p} onClick={() => setAmountStr(String(p))} className={clsx("h-11 rounded-full border px-5 text-sm font-bold transition", amount === p ? "border-brand-500 bg-brand-50 text-brand-800" : "border-line-strong hover:border-ink-faint")}>${p}</button>
+                  ))}
+                </div>
+              </div>
+              <p className="mt-4 flex items-center gap-2 text-sm text-ink-mute"><ShieldCheck className="h-4 w-4 text-brand-600" /> Only spendable at verified {to.allowed.join(", ")} merchants.</p>
+            </>
+          )}
+
+          {step === 2 && to && (
+            <>
+              <h1 className="text-3xl font-extrabold sm:text-4xl">Review & pay</h1>
+              <p className="mt-2 text-ink-mute">{live ? "You'll pay securely with MoonPay." : "Choose how you'd like to pay."}</p>
+              {live ? (
+                <div className="mt-7 flex items-center gap-4 rounded-2xl border-2 border-brand-500 bg-white p-4 ring-4 ring-brand-500/10">
+                  <span className="grid h-11 w-11 place-items-center rounded-xl bg-canvas text-ink-soft"><CreditCard className="h-5 w-5" /></span>
+                  <div className="flex-1"><div className="font-bold">Card or bank via MoonPay</div><div className="text-sm text-ink-mute">Licensed checkout · opens in a new window</div></div>
+                  <Check className="h-5 w-5 text-brand-600" strokeWidth={3} />
+                </div>
+              ) : (
+              <div className="mt-7 space-y-3" role="radiogroup" aria-label="Payment method">
+                {METHODS.map((m) => (
+                  <button key={m.id} role="radio" aria-checked={method === m.id} onClick={() => setMethod(m.id)}
+                    className={clsx("flex w-full items-center gap-4 rounded-2xl border-2 bg-white p-4 text-left transition", method === m.id ? "border-brand-500 ring-4 ring-brand-500/10" : "border-line hover:border-line-strong")}>
+                    <span className="grid h-11 w-11 place-items-center rounded-xl bg-canvas text-ink-soft"><m.icon className="h-5 w-5" /></span>
+                    <div className="flex-1"><div className="font-bold">{m.title}</div><div className="text-sm text-ink-mute">{m.sub}</div></div>
+                    <span className={clsx("grid h-6 w-6 place-items-center rounded-full border-2", method === m.id ? "border-brand-500 bg-brand-500 text-white" : "border-line-strong")}>{method === m.id && <Check className="h-3.5 w-3.5" strokeWidth={3.5} />}</span>
+                  </button>
+                ))}
+              </div>
+              )}
+              <p className="mt-5 flex items-center gap-2 text-sm text-ink-mute"><Lock className="h-4 w-4" /> Encrypted. Funds go to {to.name}'s merchant-locked wallet, never to cash.</p>
+              <p className="mt-2 flex items-center gap-2 rounded-xl bg-sun-50 px-3.5 py-2.5 text-[13px] font-medium text-sun-600">{live ? "MoonPay sandbox: test cards only, no real money moves." : "Sandbox funding: no real card is charged and no real money moves."}</p>
+            </>
+          )}
+        </div>
+
+        {/* summary */}
+        <aside className="lg:sticky lg:top-10 lg:self-start">
+          <div className="card p-5 sm:p-6">
+            <div className="eyebrow">Summary</div>
+            {to ? (
+              <div className="mt-4 flex items-center gap-3">
+                <Avatar initials={to.initials} hue={to.hue} size={44} />
+                <div className="leading-tight"><div className="font-bold">{to.fullName}</div><div className="text-sm text-ink-mute">{to.city} · •••• {to.last4}</div></div>
+              </div>
+            ) : <p className="mt-4 text-sm text-ink-mute">Select who you're funding to continue.</p>}
+            {to && step >= 1 && (
+              <dl className="mt-5 space-y-3 border-t border-line pt-5 text-sm">
+                <div className="flex justify-between"><dt className="text-ink-mute">Care credit</dt><dd className="num font-semibold">{usd(amount)}</dd></div>
+                <div className="flex justify-between"><dt className="text-ink-mute">Funding fee ({amount > 0 ? "1%" : "—"})</dt><dd className="num font-semibold">{usd(fee)}</dd></div>
+                <div className="flex justify-between"><dt className="text-ink-mute">Exchange rate</dt><dd className="font-semibold">$1 = ₦{FX_RATE.toLocaleString()}</dd></div>
+                <div className="flex justify-between border-t border-line pt-4 text-base"><dt className="font-bold">You pay</dt><dd className="num font-extrabold">{usd(total)}</dd></div>
+                <div className="flex justify-between rounded-xl bg-brand-50 px-3.5 py-3 text-brand-800"><dt className="font-semibold">{to.name} receives</dt><dd className="font-bold">{ngn(amount)}</dd></div>
+              </dl>
+            )}
           </div>
 
-          <details className="card group mt-6 px-5">
-            <summary className="flex h-14 cursor-pointer list-none items-center justify-between text-sm font-bold">
-              How this is released
-              <span className="text-xs font-semibold text-brand-700 group-open:hidden">Show schedule</span>
-            </summary>
-            <ul className="divide-y divide-line border-t border-line pb-2">
-              {p.steps.slice(1).map((s, i) => (
-                <li key={s} className="flex items-center justify-between gap-3 py-3 text-sm">
-                  <span className="flex items-center gap-2.5"><span className="grid h-5 w-5 place-items-center rounded-full bg-canvas-2 text-[11px] font-bold text-ink-mute">{i + 1}</span>{s}</span>
-                  <span className="num font-semibold">{usd(perStep)}</span>
-                </li>
-              ))}
-            </ul>
-          </details>
-
-          <p className="mt-5 flex items-center justify-center gap-2 text-xs text-ink-mute"><Lock className="h-3.5 w-3.5" />Demo only. No real money moves in this prototype.</p>
-        </section>
-      )}
-
-      {/* ---------- Actions ---------- */}
-      <div className="fixed inset-x-0 bottom-0 z-30 flex gap-3 border-t border-line bg-white/90 px-4 pb-safe pt-3 backdrop-blur-xl lg:static lg:mt-8 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
-        {backStep !== null && step > 0 && <Button variant="outline" size="lg" onClick={() => go(backStep)} icon={<ArrowLeft className="h-5 w-5" />}>Back</Button>}
-        {step < 2 ? (
-          <Button size="lg" className="flex-1" disabled={step === 0 ? !id : !amountOk} onClick={() => go(step + 1)}>
-            Continue{step === 1 && amountOk ? ` · ${usd(amount)}` : ""} <ArrowRight className="h-5 w-5" />
-          </Button>
-        ) : (
-          <Button size="lg" className="flex-1" loading={busy} onClick={pay} icon={<Lock className="h-[18px] w-[18px]" />}>Pay {usd(amount + fee)}</Button>
-        )}
+          <div className="mt-4">
+            {step === 0 && <Button size="lg" full disabled={!to} onClick={() => setStep(1)}>Continue <ArrowRight className="h-5 w-5" /></Button>}
+            {step === 1 && <Button size="lg" full disabled={!!amountErr} onClick={() => setStep(2)}>Review {usd(amount)} <ArrowRight className="h-5 w-5" /></Button>}
+            {step === 2 && (
+              <Button size="lg" full disabled={busy} onClick={live ? startCheckout : pay}>
+                {busy ? <><Loader2 className="h-5 w-5 animate-spin" /> {live ? "Opening MoonPay…" : "Processing…"}</> : <><Lock className="h-4 w-4" /> {live ? `Continue to MoonPay · ${usd(total)}` : `Pay ${usd(total)}`}</>}
+              </Button>
+            )}
+          </div>
+        </aside>
       </div>
     </div>
   );

@@ -1,56 +1,51 @@
 "use client";
 
 import Link from "next/link";
-import { MapPin, Phone, Plus, Smartphone, Users } from "lucide-react";
-import { Avatar, Badge, Button, Empty, PageHeader } from "@/components/ui/ui";
+import { Plus } from "lucide-react";
+import { Badge, Button, PageHeader, Progress } from "@/components/ui/ui";
+import { PassCard } from "@/components/PassCard";
 import { useStore } from "@/lib/store";
-import { isClosed, released } from "@/lib/care";
+import { CATEGORIES } from "@/lib/data";
 import { usd } from "@/lib/format";
 
 export default function FamilyPage() {
-  const { beneficiaries, episodes, setActivePassId } = useStore();
+  const { beneficiaries, spent } = useStore();
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Family" sub="The people you arrange care for."
-        action={<Button href="/sponsor/family/new" icon={<Plus className="h-[18px] w-[18px]" />}>Add family member</Button>} />
-      {beneficiaries.length === 0 ? (
-        <div className="card"><Empty icon={<Users />} title="No one added yet" sub="Add a family member to start arranging their care." action={<Button href="/sponsor/family/new">Add family member</Button>} /></div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {beneficiaries.map((b) => {
-            const mine = episodes.filter((e) => e.beneficiaryId === b.id);
-            const n = mine.filter((e) => !isClosed(e)).length;
-            const paid = mine.reduce((s, e) => s + released(e), 0);
-            return (
-              <article key={b.id} className="card p-5">
-                <div className="flex items-start gap-4">
-                  <Avatar initials={b.initials} hue={b.hue} size={52} />
-                  <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-lg font-bold">{b.fullName}</h2>
-                    <p className="text-sm text-ink-mute">{b.relation}</p>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-soft">
-                      <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-ink-mute" />{b.city}</span>
-                      <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-ink-mute" />{b.phone}</span>
-                    </div>
-                  </div>
-                  <Badge tone={n ? "sun" : "ink"} dot>{n ? `${n} in progress` : "No care yet"}</Badge>
+      <PageHeader title="Family" sub="Each person has their own merchant-locked pass, limits and activity."
+        action={<Button href="/sponsor/family/new" icon={<Plus className="h-4 w-4" />}>Add family member</Button>} />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        {beneficiaries.map((b) => {
+          const s = spent(b.id);
+          return (
+            <article key={b.id} className="card overflow-hidden p-5">
+              <PassCard name={b.fullName} balance={b.balance} last4={b.last4} hue={b.hue} frozen={b.frozen} />
+              <div className="mt-5 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate text-xl font-bold">{b.fullName}</h2>
+                  <p className="text-sm text-ink-mute">{b.relation} · {b.city} · {b.phone}</p>
                 </div>
-                <dl className="mt-5 grid grid-cols-2 divide-x divide-line rounded-xl bg-canvas py-3 text-center">
-                  <div><dt className="text-[11.5px] font-semibold text-ink-mute">Packages</dt><dd className="num text-lg font-bold">{mine.length}</dd></div>
-                  <div><dt className="text-[11.5px] font-semibold text-ink-mute">Paid to providers</dt><dd className="num text-lg font-bold">{usd(paid, 0)}</dd></div>
-                </dl>
-                <div className="mt-4 grid grid-cols-2 gap-2.5">
-                  <Button href={`/sponsor/care/new?for=${b.id}`}>Start care</Button>
-                  <Button href={`/sponsor/fund?to=${b.id}`} variant="outline">Fund care</Button>
-                </div>
-                <Link href="/pass" onClick={() => setActivePassId(b.id)} className="mt-3 flex h-10 items-center justify-center gap-2 rounded-lg text-[13px] font-semibold text-ink-soft transition hover:bg-canvas">
-                  <Smartphone className="h-4 w-4" />Preview {b.name}’s pass
-                </Link>
-              </article>
-            );
-          })}
-        </div>
-      )}
+                {b.lastActive === "Not yet active" ? <Badge tone="sun">Invite sent</Badge> : <Badge>Active</Badge>}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {b.allowed.map((a) => <span key={a} className="rounded-full bg-canvas px-2.5 py-1 text-xs font-semibold text-ink-soft">{CATEGORIES.find((c) => c.id === a)?.label}</span>)}
+              </div>
+              <div className="mt-5">
+                <div className="mb-1.5 flex justify-between text-xs font-semibold text-ink-mute"><span>Spent this month</span><span>{usd(s, 0)} of {usd(b.monthlyLimit, 0)}</span></div>
+                <Progress value={s} max={b.monthlyLimit} />
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <Button href={`/sponsor/fund?to=${b.id}`}>Top up</Button>
+                <Button href={`/sponsor/family/${b.id}`} variant="outline">Rules & activity</Button>
+              </div>
+            </article>
+          );
+        })}
+        <Link href="/sponsor/family/new" className="flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-line-strong text-ink-mute transition hover:border-brand-500 hover:bg-brand-50/50 hover:text-brand-700">
+          <span className="grid h-14 w-14 place-items-center rounded-full bg-canvas-2"><Plus className="h-6 w-6" /></span>
+          <span className="font-bold">Add a family member</span>
+        </Link>
+      </div>
     </div>
   );
 }

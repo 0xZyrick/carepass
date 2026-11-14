@@ -1,165 +1,177 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, BadgeCheck, CheckCircle2, ClipboardList, FileText, Plus, Smartphone, Sparkles, UserPlus, Wallet } from "lucide-react";
-import clsx from "clsx";
-import { Avatar, Badge, Button, IconTile, SectionTitle } from "@/components/ui/ui";
-import { EpisodeCard } from "@/components/EpisodeCard";
+import { useState } from "react";
+import { ArrowRight, BellRing, BadgeCheck, Plus, ShieldCheck, ShieldX, Snowflake, UserPlus, X } from "lucide-react";
+import { Avatar, Badge, Button, Progress } from "@/components/ui/ui";
+import { TxDetailSheet, TxRow } from "@/components/TxRow";
 import { useStore } from "@/lib/store";
-import { EventKind, held, isClosed, pkgOf, released, stateOf, when } from "@/lib/care";
-import { greet, usd } from "@/lib/format";
-import { SPONSOR } from "@/lib/data";
+import { FX_RATE, greet, ngn, usd } from "@/lib/format";
+import { Tx } from "@/lib/data";
 
-const EVENT_ICON: Record<EventKind, typeof Wallet> = {
-  started: ClipboardList, funded: Wallet, docs: FileText, confirmed: BadgeCheck, completed: CheckCircle2,
-};
-const EVENT_TONE: Record<EventKind, "brand" | "sun" | "iris" | "ink"> = {
-  started: "ink", funded: "sun", docs: "iris", confirmed: "brand", completed: "brand",
-};
+const HISTORY = [["Jun", 120], ["Jul", 95], ["Aug", 140], ["Sep", 110], ["Oct", 162]] as const;
 
 export default function Overview() {
-  const { episodes, beneficiaries, events } = useStore();
-  const active = episodes.filter((e) => !isClosed(e));
-  const heldTotal = episodes.reduce((s, e) => s + held(e), 0);
-  const paidTotal = episodes.reduce((s, e) => s + released(e), 0);
-  const fundedTotal = heldTotal + paidTotal;
-  const paidPct = fundedTotal > 0 ? (paidTotal / fundedTotal) * 100 : 0;
-  const attention = active.filter((e) => ["needs-funding", "awaiting-intake"].includes(stateOf(e)));
+  const { me, beneficiaries, txs, requests, totalCredit, settledThisMonth, settledCount, blockedCount, spent, dismissRequest } = useStore();
+  const [open, setOpen] = useState<Tx | null>(null);
+  const bars = [...HISTORY.map(([m, v]) => [m, v] as [string, number]), ["Nov", settledThisMonth] as [string, number]];
+  const max = Math.max(...bars.map((b) => b[1])) * 1.1;
   const who = (id: string) => beneficiaries.find((b) => b.id === id);
 
   return (
     <div className="animate-fade-in">
-      {/* Greeting */}
-      <div className="mb-6 flex items-end justify-between gap-4 sm:mb-8">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-ink-mute">{greet()}, {SPONSOR.first}</p>
-          <h1 className="mt-1 text-[28px] font-bold sm:text-[36px]">Your family’s care</h1>
+      <div className="mb-7 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-ink-mute">{greet()}, {me?.name.split(" ")[0]} 👋</p>
+          <h1 className="mt-1 text-[30px] font-extrabold leading-tight sm:text-4xl">Your family's care</h1>
         </div>
-        <div className="hidden sm:block"><Button href="/sponsor/care/new" icon={<Plus className="h-[18px] w-[18px]" />}>Start a package</Button></div>
+        <Button href="/sponsor/family/new" variant="outline" className="hidden sm:inline-flex" icon={<UserPlus className="h-4 w-4" />}>Add family</Button>
       </div>
 
-      {/* Money summary */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 to-brand-950 p-5 text-white shadow-raise sm:p-7">
-        <div className="grain pointer-events-none absolute inset-0" />
-        <div className="relative">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="text-[13px] font-semibold text-brand-200">Total funded</div>
-              <div className="num mt-1 text-[40px] font-bold leading-none sm:text-5xl">{usd(fundedTotal)}</div>
-            </div>
-            <div className="flex w-full gap-2 sm:w-auto">
-              <Button href="/sponsor/fund" variant="light" className="flex-1 sm:flex-none" icon={<Wallet className="h-4 w-4" />}>Fund care</Button>
-              <Button href="/sponsor/care/new" variant="glass" className="flex-1 sm:hidden" icon={<Plus className="h-4 w-4" />}>New package</Button>
-            </div>
-          </div>
-
-          <div className="mt-6 flex h-2.5 overflow-hidden rounded-full bg-white/15" role="img" aria-label={`${Math.round(paidPct)}% of funded money paid to providers`}>
-            <div className="h-full rounded-full bg-brand-300 transition-all duration-700" style={{ width: `${paidPct}%` }} />
-          </div>
-          <dl className="mt-5 grid grid-cols-3 gap-3">
-            {[
-              ["Paid to providers", usd(paidTotal), "bg-brand-300"],
-              ["Held for next steps", usd(heldTotal), "bg-white/30"],
-              ["Care in progress", String(active.length), ""],
-            ].map(([l, v, dot]) => (
-              <div key={l}>
-                <dt className="flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-200 sm:text-[13px]">{dot && <span className={clsx("h-2 w-2 rounded-full", dot)} />}{l}</dt>
-                <dd className="num mt-1 text-lg font-bold sm:text-2xl">{v}</dd>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+        <div className="space-y-6">
+          {/* Balance hero */}
+          <section className="relative overflow-hidden rounded-[32px] bg-brand-900 p-6 text-white sm:p-8" aria-label="Total care credit">
+            <div className="grain absolute inset-0" />
+            <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-brand-500/25 blur-3xl" />
+            <div className="relative">
+              <div className="flex items-center justify-between">
+                <span className="eyebrow !text-brand-200">Total care credit</span>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/80">$1 ≈ ₦{FX_RATE.toLocaleString()}</span>
               </div>
-            ))}
-          </dl>
-        </div>
-      </section>
+              <div className="num mt-3 text-[52px] font-extrabold leading-none sm:text-[64px]">{usd(totalCredit)}</div>
+              <div className="mt-2 text-brand-200">≈ {ngn(totalCredit)} across {beneficiaries.length} {beneficiaries.length === 1 ? "person" : "people"}</div>
 
-      {/* Needs attention */}
-      {attention.length > 0 && (
-        <section className="mt-6" aria-label="Needs your attention">
-          {attention.map((e) => {
-            const st = stateOf(e), b = who(e.beneficiaryId), p = pkgOf(e.packageId);
-            return (
-              <Link key={e.id} href={st === "needs-funding" ? `/sponsor/fund?care=${e.id}` : `/sponsor/care/${e.id}`}
-                className="mb-2 flex items-center gap-3.5 rounded-2xl border border-sun-100 bg-sun-50/70 p-4 transition hover:bg-sun-50">
-                <IconTile tone="sun" size={40}><Sparkles className="h-5 w-5" /></IconTile>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-bold">{st === "needs-funding" ? `Fund ${p.name.toLowerCase()} for ${b?.name}` : `Waiting for ${b?.name}’s documents`}</div>
-                  <div className="text-[13px] text-sun-700">{st === "needs-funding" ? "The provider can begin once it’s funded." : "We’ll update you as soon as the provider confirms intake."}</div>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Button href="/sponsor/fund" variant="light" size="lg" icon={<Plus className="h-5 w-5" />} className="flex-1 sm:flex-none">Fund care</Button>
+                <Button href="/sponsor/activity" size="lg" className="flex-1 !bg-white/10 hover:!bg-white/20 sm:flex-none">View activity</Button>
+              </div>
+
+              <div className="mt-8 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-white/[0.07] p-4">
+                  <div className="text-xs font-semibold text-white/55">Settled this month</div>
+                  <div className="num mt-1 text-2xl font-bold">{usd(settledThisMonth)}</div>
+                  <div className="text-xs text-white/50">{settledCount} clinic payments</div>
                 </div>
-                <ArrowRight className="h-4 w-4 shrink-0 text-sun-700" />
-              </Link>
-            );
-          })}
-        </section>
-      )}
-
-      <div className="mt-9 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <div>
-          <SectionTitle action={episodes.length > 0 && <Link href="/sponsor/care" className="text-sm font-semibold text-brand-700 hover:underline">View all</Link>}>In progress</SectionTitle>
-          {active.length === 0 ? (
-            <div className="card p-6 sm:p-8">
-              <div className="mx-auto max-w-md text-center">
-                <IconTile size={52} className="mx-auto"><ClipboardList className="h-6 w-6" /></IconTile>
-                <h3 className="mt-4 text-lg font-bold">Nothing in progress</h3>
-                <p className="mt-1 text-sm text-ink-mute">Start a care package for someone in your family and follow every step from here.</p>
-                <Button href="/sponsor/care/new" className="mt-5">Start a care package</Button>
+                <Link href="/sponsor/activity?f=blocked" className="rounded-2xl bg-white/[0.07] p-4 transition hover:bg-white/10">
+                  <div className="text-xs font-semibold text-white/55">Blocked attempts</div>
+                  <div className="num mt-1 text-2xl font-bold">{blockedCount}</div>
+                  <div className="text-xs text-white/50">Non-care destinations rejected</div>
+                </Link>
               </div>
             </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1">
-              {active.map((e) => <EpisodeCard key={e.id} e={e} who={who(e.beneficiaryId)} />)}
+          </section>
+
+          {/* Family */}
+          <section aria-label="Family">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xl font-bold">Family passes</h2>
+              <Link href="/sponsor/family" className="flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">Manage <ArrowRight className="h-4 w-4" /></Link>
             </div>
-          )}
-
-          {/* Activity */}
-          <SectionTitle className="mt-9">Recent activity</SectionTitle>
-          <div className="card divide-y divide-line">
-            {events.length === 0 && <p className="p-5 text-sm text-ink-mute">Activity will appear here as care progresses.</p>}
-            {events.slice(0, 6).map((ev) => {
-              const I = EVENT_ICON[ev.kind];
-              return (
-                <div key={ev.id} className="flex items-start gap-3.5 p-4">
-                  <IconTile tone={EVENT_TONE[ev.kind]} size={38}><I className="h-[18px] w-[18px]" /></IconTile>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold">{ev.title}</div>
-                    {ev.detail && <div className="text-[13px] text-ink-mute">{ev.detail}</div>}
-                  </div>
-                  <span className="shrink-0 pt-0.5 text-xs font-medium text-ink-faint">{when(ev.daysAgo)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Side column */}
-        <aside className="space-y-6">
-          <section>
-            <SectionTitle action={<Link href="/sponsor/family" className="text-sm font-semibold text-brand-700 hover:underline">Manage</Link>}>Family</SectionTitle>
-            <div className="card divide-y divide-line">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {beneficiaries.map((b) => {
-                const n = active.filter((e) => e.beneficiaryId === b.id).length;
+                const s = spent(b.id);
                 return (
-                  <Link key={b.id} href={`/sponsor/care/new?for=${b.id}`} className="flex items-center gap-3 p-4 transition hover:bg-canvas/60">
-                    <Avatar initials={b.initials} hue={b.hue} size={42} />
-                    <div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{b.fullName}</div><div className="text-[13px] text-ink-mute">{b.relation} · {b.city}</div></div>
-                    <Badge tone={n ? "sun" : "ink"}>{n ? `${n} active` : "No care"}</Badge>
-                  </Link>
+                  <article key={b.id} className="card p-5">
+                    <div className="flex items-center gap-3.5">
+                      <Avatar initials={b.initials} hue={b.hue} size={48} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-bold">{b.fullName}</div>
+                        <div className="truncate text-sm text-ink-mute">{b.relation} · {b.city}</div>
+                      </div>
+                      {b.frozen && <Badge tone="iris"><Snowflake className="h-3 w-3" /> Frozen</Badge>}
+                    </div>
+                    <div className="mt-5 flex items-end justify-between">
+                      <div>
+                        <div className="num text-[30px] font-extrabold leading-none">{usd(b.balance)}</div>
+                        <div className="mt-1 text-[13px] text-ink-mute">{ngn(b.balance)}</div>
+                      </div>
+                      <div className="text-right text-xs text-ink-mute">Last active<br /><span className="font-semibold text-ink-soft">{b.lastActive}</span></div>
+                    </div>
+                    <div className="mt-5">
+                      <div className="mb-1.5 flex justify-between text-xs font-semibold text-ink-mute">
+                        <span>Monthly limit</span><span>{usd(s, 0)} / {usd(b.monthlyLimit, 0)}</span>
+                      </div>
+                      <Progress value={s} max={b.monthlyLimit} />
+                    </div>
+                    <div className="mt-5 grid grid-cols-2 gap-2.5">
+                      <Button href={`/sponsor/fund?to=${b.id}`} size="sm">Top up</Button>
+                      <Button href={`/sponsor/family/${b.id}`} size="sm" variant="outline">Manage</Button>
+                    </div>
+                  </article>
                 );
               })}
-              <Link href="/sponsor/family/new" className="flex items-center gap-3 p-4 text-sm font-semibold text-brand-700 transition hover:bg-canvas/60">
-                <span className="grid h-[42px] w-[42px] place-items-center rounded-full border-2 border-dashed border-line-strong"><UserPlus className="h-[18px] w-[18px]" /></span>Add family member
+              <Link href="/sponsor/family/new" className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-line-strong p-5 text-ink-mute transition hover:border-brand-500 hover:bg-brand-50/50 hover:text-brand-700">
+                <span className="grid h-12 w-12 place-items-center rounded-full bg-canvas-2"><UserPlus className="h-5 w-5" /></span>
+                <span className="font-bold">Add a family member</span>
               </Link>
             </div>
           </section>
 
-          <Link href="/pass" className="card card-hover flex items-center gap-4 p-5">
-            <IconTile tone="iris" size={46}><Smartphone className="h-5 w-5" /></IconTile>
-            <div className="min-w-0 flex-1">
-              <div className="font-bold">Preview the family pass</div>
-              <div className="text-[13px] text-ink-mute">See exactly what your relative sees on their phone.</div>
+          {/* Chart */}
+          <section className="card p-5 sm:p-6" aria-label="Care spending history">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-bold">Care spending</h2>
+                <p className="text-sm text-ink-mute">Settled at clinics, last 6 months</p>
+              </div>
+              <Badge tone="ink">USD</Badge>
             </div>
-            <ArrowRight className="h-4 w-4 text-ink-faint" />
-          </Link>
-        </aside>
+            <div className="mt-6 flex h-44 items-end gap-3 sm:gap-5">
+              {bars.map(([m, v], i) => (
+                <div key={m} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
+                  <span className="num text-xs font-bold text-ink-soft">${Math.round(v)}</span>
+                  <div className={`w-full rounded-t-xl transition-all duration-700 ${i === bars.length - 1 ? "bg-brand-500" : "bg-brand-100"}`} style={{ height: `${(v / max) * 100}%` }} />
+                  <span className="text-xs font-semibold text-ink-mute">{m}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        {/* Right rail */}
+        <div className="space-y-6">
+          {requests.map((r) => {
+            const b = who(r.beneficiaryId)!;
+            return (
+              <section key={r.id} className="relative overflow-hidden rounded-3xl border border-sun-400/50 bg-sun-50 p-5" aria-label="Top-up request">
+                <div className="flex items-center gap-2 text-sm font-bold text-sun-600"><BellRing className="h-4 w-4" /> Top-up request</div>
+                <button onClick={() => dismissRequest(r.id)} aria-label="Dismiss request" className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full text-sun-600 hover:bg-sun-100"><X className="h-4 w-4" /></button>
+                <div className="mt-3 flex items-center gap-3">
+                  <Avatar initials={b.initials} hue={b.hue} size={40} />
+                  <div className="leading-tight"><div className="font-bold">{b.name} asked for {usd(r.amount, 0)}</div><div className="text-sm text-ink-soft">“{r.note}”</div></div>
+                </div>
+                <Button href={`/sponsor/fund?to=${b.id}&amount=${r.amount}`} full size="sm" className="mt-4">Fund {usd(r.amount, 0)} now</Button>
+              </section>
+            );
+          })}
+
+          <section className="card p-5" aria-label="Guardrail status">
+            <div className="flex items-center gap-3">
+              <span className="relative grid h-11 w-11 place-items-center rounded-2xl bg-brand-50 text-brand-700"><ShieldCheck className="h-5 w-5" /><span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-brand-500 ring-2 ring-white" /></span>
+              <div className="leading-tight"><div className="font-bold">Guardrails active</div><div className="text-sm text-ink-mute">All passes protected</div></div>
+            </div>
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {["Verified merchants only", "Monthly limits enforced", "Per-payment caps on"].map((t) => (
+                <li key={t} className="flex items-center gap-2.5 font-medium text-ink-soft"><BadgeCheck className="h-4 w-4 text-brand-500" />{t}</li>
+              ))}
+              <li className="flex items-center gap-2.5 font-medium text-ink-soft"><ShieldX className="h-4 w-4 text-rose-500" />{blockedCount} attempts blocked this month</li>
+            </ul>
+            <Button href="/guardrails" variant="soft" size="sm" full className="mt-4">Test the guardrails</Button>
+          </section>
+
+          <section className="card overflow-hidden" aria-label="Recent activity">
+            <div className="flex items-center justify-between px-5 pb-2 pt-5">
+              <h2 className="text-lg font-bold">Recent activity</h2>
+              <Link href="/sponsor/activity" className="text-sm font-semibold text-brand-700 hover:underline">See all</Link>
+            </div>
+            <div className="divide-y divide-line/70 pb-1">
+              {txs.slice(0, 5).map((t) => <TxRow key={t.id} tx={t} who={who(t.beneficiaryId)} onClick={() => setOpen(t)} />)}
+            </div>
+          </section>
+        </div>
       </div>
+      <TxDetailSheet tx={open} who={open ? who(open.beneficiaryId) : undefined} onClose={() => setOpen(null)} />
     </div>
   );
 }

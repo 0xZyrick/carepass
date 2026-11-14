@@ -1,318 +1,287 @@
 import {
-  ArrowRight, BadgeCheck, Check, ChevronDown, ClipboardList, Eye, EyeOff, FileCheck, KeyRound, Lock, Minus, Smartphone, Stethoscope, Wallet, X,
+  ArrowRight, BadgeCheck, Bell, Check, HandCoins, Landmark, Lock, ScanLine, ShieldCheck, ShieldX, SlidersHorizontal, Smartphone, Timer, Users, Zap,
 } from "lucide-react";
-import clsx from "clsx";
-import { Badge, Button, PkgIcon } from "@/components/ui/ui";
-import { PhoneMock } from "@/components/PhoneMock";
-import { PACKAGES } from "@/lib/care";
-import { MERCHANTS } from "@/lib/data";
-import { usd } from "@/lib/format";
+import { Button, CatIcon } from "@/components/ui/ui";
+import { PassCard } from "@/components/PassCard";
+import { LandingDemo } from "@/components/LandingDemo";
+import { PartnersSection } from "@/components/PartnersSection";
+import { CATEGORIES, MERCHANTS } from "@/lib/data";
 
 const FAQ = [
-  ["Do you provide the care?", "No. Care is delivered by existing hospitals, clinics and labs in Lagos and Abuja. We package it, vet the providers and keep everyone clear on the next step."],
-  ["What can I see as a sponsor?", "Progress only: package selected, intake done, appointments completed, package closed. Diagnoses and clinical notes stay with your family and their provider."],
-  ["Where does money come in?", "Optionally. You fund a package and the money is released to the provider as each milestone is confirmed, so you only pay for care that is proven to have happened."],
-  ["How does a provider confirm a visit?", "Your family member shows a 4-digit code at the visit. The provider enters it, and that confirmation is both the proof and the payment trigger."],
-  ["What if my family needs something that is not in a package?", "Start with the closest package. Exclusions are listed up front so nobody is surprised, and you can start another package at any time."],
-  ["Is this live?", "This is a working prototype on demo data. No real money moves and no real patient information is stored. Production will use a licensed payments partner."],
+  ["What can I use today?", "The full product: accounts, family passes, spending rules, the guardrail, funding, clinic payments and a live activity feed. It currently runs on Stellar testnet with sandbox funding, so no real money moves. Going to mainnet and live funding is the next step, with the same product and the same rules."],
+  ["Can my family spend the money on anything else?", "No. A CarePass balance only clears at hospitals, labs, pharmacies and other providers on the verified whitelist. Any other destination is rejected, and you see the attempt."],
+  ["Who holds the money?", "Not us. CarePass is designed to be non-custodial: funds sit in a Stellar vault governed by a Soroban contract that you, the sponsor, control. We never pool family balances in an account we operate."],
+  ["How does the clinic get paid in Naira?", "Your relative scans the clinic's QR code or taps their pass. The payment settles on Stellar in seconds, and a licensed payout partner converts it to Naira for the clinic."],
+  ["What if my mom needs more money in an emergency?", "She taps Request on her pass and you get a notification. You can top up in under a minute, and the request clears automatically."],
+  ["Can I control how much is spent?", "Yes. For each person you set a monthly limit, a per-payment cap and the types of care allowed. You can freeze a pass instantly."],
+  ["What does it cost?", "Sponsors see one fee before they confirm, including any card or bank charge from the funding partner. Family members pay nothing to use their pass. Pricing is confirmed with each partner before launch."],
+  ["Do you collect health records?", "No. CarePass sees the amount, the provider and the care category for each payment. It does not collect diagnoses, prescriptions or medical records."],
 ];
-
-const HOW = [
-  { icon: ClipboardList, t: "Choose a package", d: "Pick the care that fits: maternity, diagnostics, surgery or chronic follow-up. Inclusions and exclusions are clear up front." },
-  { icon: Stethoscope, t: "Pick a vetted provider", d: "Choose from verified hospitals and labs in your family member’s city, with hours and distance." },
-  { icon: Smartphone, t: "Family follows the steps", d: "They see the next step, what to bring and where to go. Documents go to the provider only." },
-  { icon: KeyRound, t: "Provider confirms with a code", d: "At each visit the provider enters the patient’s code. Confirmed steps release payment, nothing sooner." },
-];
-
-const SCHEDULE = [
-  { s: "Intake and documents", st: "done" },
-  { s: "Consultation", st: "done" },
-  { s: "Labs and imaging", st: "now" },
-  { s: "Results review", st: "next" },
-  { s: "Package closed", st: "next" },
-] as const;
-
-const COMPARE: { row: string; cols: ("yes" | "part" | "no")[] }[] = [
-  { row: "Covers in-person care end to end", cols: ["yes", "no", "no", "part"] },
-  { row: "Proof that each visit happened", cols: ["yes", "no", "no", "part"] },
-  { row: "Pay only as steps are confirmed", cols: ["yes", "no", "no", "no"] },
-  { row: "One shared view for you and family", cols: ["yes", "part", "no", "no"] },
-  { row: "Built for families paying out of pocket", cols: ["yes", "yes", "yes", "no"] },
-];
-const COMPARE_COLS = ["CarePass", "Telemedicine apps", "WhatsApp + transfers", "HMOs & insurance"];
 
 export default function Landing() {
-  const providerCount = new Set(PACKAGES.flatMap((p) => p.providerIds)).size;
   return (
     <>
-      {/* ---------- Hero ---------- */}
+      {/* HERO */}
       <section className="relative overflow-hidden">
-        <div className="grid-fade pointer-events-none absolute inset-0" />
-        <div className="container-x relative grid grid-cols-1 items-center gap-14 pb-16 pt-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8 lg:pb-24 lg:pt-16">
-          <div>
-            <Badge tone="brand" dot className="mb-5 bg-white py-1.5 pl-2.5 pr-3 shadow-card ring-1 ring-line">
-              Care for family in Lagos &amp; Abuja
-            </Badge>
-            <h1 className="text-balance text-[42px] font-bold leading-[1.02] sm:text-[58px] lg:text-[68px]">
-              Get Mom the right care. <span className="text-brand-600">See that it happened.</span>
+        <div className="container-x grid grid-cols-1 items-center gap-10 pb-16 pt-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-6 lg:pb-24 lg:pt-14">
+          <div className="animate-fade-up">
+            <span className="inline-flex items-center gap-2 rounded-full border border-line bg-white py-1.5 pl-2 pr-4 text-[13px] font-semibold text-ink-soft shadow-card">
+              <span className="grid h-5 w-5 place-items-center rounded-full bg-brand-500 text-white"><Lock className="h-3 w-3" /></span>
+              Healthcare payments across borders
+            </span>
+            <h1 className="mt-6 text-balance text-[44px] font-extrabold leading-[1.02] sm:text-6xl lg:text-[72px]">
+              Send care,
+              <br />
+              <span className="relative inline-block text-brand-600">
+                not cash.
+                <svg className="absolute -bottom-2 left-0 w-full" viewBox="0 0 300 12" fill="none" preserveAspectRatio="none" aria-hidden>
+                  <path d="M3 8c60-6 140-8 294-2" stroke="#F5B83D" strokeWidth="5" strokeLinecap="round" />
+                </svg>
+              </span>
             </h1>
-            <p className="mt-6 max-w-xl text-pretty text-[17px] leading-relaxed text-ink-soft sm:text-lg">
-              Families already pay for care back home. CarePass fixes the path around that money: the right package, a vetted provider, every step tracked, and funds released only when the provider confirms each step.
+            <p className="mt-7 max-w-lg text-lg leading-relaxed text-ink-soft">
+              Millions of families pay for a parent's treatment by sending cash and hoping. CarePass replaces that transfer with a pass that only works at <strong className="font-semibold text-ink">verified hospitals, labs and pharmacies</strong>, within limits you set, with a receipt for every payment.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button href="/signin?mode=signup" size="lg">Start a care package <ArrowRight className="h-5 w-5" /></Button>
-              <Button href="/pass" size="lg" variant="outline">See the family view</Button>
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <Button href="/signin?mode=signup" size="lg" icon={undefined}>
+                Start funding care <ArrowRight className="h-5 w-5" />
+              </Button>
+              <Button href="/pass" size="lg" variant="outline">See the family pass</Button>
             </div>
-            <ul className="mt-9 grid grid-cols-1 max-w-xl gap-3 text-sm font-semibold text-ink-soft sm:grid-cols-3">
-              {[[BadgeCheck, "Vetted providers"], [Wallet, "Pay per confirmed step"], [Lock, "Private by design"]].map(([I, t]) => {
-                const Icon = I as typeof BadgeCheck;
-                return <li key={t as string} className="flex items-center gap-2"><Icon className="h-[18px] w-[18px] text-brand-600" />{t as string}</li>;
-              })}
+            <ul className="mt-9 flex flex-wrap gap-x-6 gap-y-2.5 text-sm font-semibold text-ink-soft">
+              {["Non-custodial by design", "Settles on Stellar in seconds", "Built for Naira payouts"].map((t) => (
+                <li key={t} className="flex items-center gap-2"><Check className="h-4 w-4 text-brand-600" strokeWidth={3} />{t}</li>
+              ))}
             </ul>
           </div>
-          <div className="relative flex justify-center py-6 lg:py-0">
-            <div className="absolute inset-x-0 top-1/2 mx-auto h-[420px] w-[420px] max-w-full -translate-y-1/2 rounded-full bg-brand-200/50 blur-3xl" />
-            <PhoneMock className="relative" />
-          </div>
-        </div>
-      </section>
 
-      {/* ---------- Proof strip ---------- */}
-      <section className="border-y border-line bg-white">
-        <dl className="container-x grid grid-cols-1 grid-cols-2 gap-y-6 py-8 sm:grid-cols-4">
-          {[
-            [String(PACKAGES.length), "Defined care packages"],
-            [String(providerCount), "Vetted partner providers"],
-            ["2", "Cities: Lagos and Abuja"],
-            ["100%", "Payouts tied to a confirmed step"],
-          ].map(([v, l]) => (
-            <div key={l} className="px-2 text-center sm:border-l sm:border-line sm:first:border-l-0">
-              <dt className="num text-[32px] font-bold leading-none sm:text-4xl">{v}</dt>
-              <dd className="mt-2 text-[13px] font-medium text-ink-mute">{l}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      {/* ---------- How it works ---------- */}
-      <section id="how" className="container-x py-20 lg:py-28">
-        <div className="max-w-2xl">
-          <div className="eyebrow mb-3">How it works</div>
-          <h2 className="h-section text-balance">From “we need care for Mom” to a completed visit.</h2>
-        </div>
-        <ol className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {HOW.map((h, i) => (
-            <li key={h.t} className="card card-hover relative p-6">
-              <div className="flex items-center justify-between">
-                <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand-50 text-brand-700"><h.icon className="h-5 w-5" /></span>
-                <span className="num text-4xl font-bold text-canvas-3">0{i + 1}</span>
+          {/* visual */}
+          <div className="relative mx-auto w-full max-w-[520px] animate-fade-up [animation-delay:120ms]">
+            <div className="relative overflow-hidden rounded-[36px] bg-brand-900 px-6 pb-10 pt-12 sm:px-10 sm:pb-14 sm:pt-16">
+              <div className="grain absolute inset-0" />
+              <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-500/30 blur-3xl" />
+              <div className="relative mx-auto max-w-[340px] -rotate-3 animate-float">
+                <PassCard name="Adebola Okonkwo" balance={186.4} last4="8842" />
               </div>
-              <h3 className="mt-5 text-lg font-bold">{h.t}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-mute">{h.d}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      {/* ---------- Money moves when care happens ---------- */}
-      <section className="relative overflow-hidden bg-brand-950 text-white">
-        <div className="grain pointer-events-none absolute inset-0" />
-        <div className="container-x relative grid grid-cols-1 items-center gap-12 py-20 lg:grid-cols-2 lg:gap-20 lg:py-28">
-          <div>
-            <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-300">Pay for proof</div>
-            <h2 className="h-section text-balance">Money moves only when care happens.</h2>
-            <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-white/70">
-              Fund a package once. Your money is held against it and released to the provider one confirmed step at a time. If a step never happens, that money stays yours.
-            </p>
-            <ul className="mt-8 space-y-3.5">
-              {["Payouts are fixed per step when you fund", "A confirmed visit code is the only trigger", "You see every release as it happens"].map((t) => (
-                <li key={t} className="flex items-center gap-3 text-[15px] text-white/85">
-                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-500/25 text-brand-200"><Check className="h-3.5 w-3.5" strokeWidth={3} /></span>{t}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-5 shadow-pop backdrop-blur sm:p-7">
-            <div className="flex items-end justify-between">
-              <div>
-                <div className="text-xs font-semibold text-white/55">Diagnostic workup · funded</div>
-                <div className="num mt-1 text-4xl font-bold">$120.00</div>
+              <div className="relative mx-auto mt-7 flex max-w-[340px] flex-col gap-3">
+                <div className="flex items-center gap-3 rounded-2xl bg-white p-3 pr-4 shadow-pop">
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-700"><ShieldCheck className="h-5 w-5" /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-bold">Lagoon Hospital</div>
+                    <div className="text-xs text-ink-mute">Verified · settled in seconds</div>
+                  </div>
+                  <span className="num text-sm font-bold">−$45.00</span>
+                </div>
+                <div className="ml-6 flex items-center gap-3 rounded-2xl bg-white p-3 pr-4 shadow-pop">
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-rose-50 text-rose-700"><ShieldX className="h-5 w-5" /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-bold">Personal wallet</div>
+                    <div className="text-xs text-ink-mute">Blocked by guardrail</div>
+                  </div>
+                  <span className="num text-sm font-bold text-rose-700">$50.00</span>
+                </div>
               </div>
-              <Badge tone="dark" dot>2 of 5 payouts made</Badge>
             </div>
-            <div className="mt-5 flex gap-1.5" aria-hidden>
-              {SCHEDULE.map((x) => (
-                <span key={x.s} className={clsx("h-2 flex-1 rounded-full", x.st === "done" ? "bg-brand-400" : x.st === "now" ? "bg-brand-400/40" : "bg-white/15")} />
-              ))}
-            </div>
-            <ul className="mt-5 divide-y divide-white/10">
-              {SCHEDULE.map((x) => (
-                <li key={x.s} className="flex items-center gap-3 py-3">
-                  <span className={clsx("grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold",
-                    x.st === "done" ? "bg-brand-400 text-brand-950" : x.st === "now" ? "bg-white text-ink" : "bg-white/10 text-white/50")}>
-                    {x.st === "done" ? <Check className="h-3.5 w-3.5" strokeWidth={3.2} /> : ""}
-                  </span>
-                  <span className={clsx("flex-1 text-sm", x.st === "next" ? "text-white/50" : "font-semibold")}>{x.s}</span>
-                  <span className={clsx("num text-sm font-semibold", x.st === "done" ? "text-brand-300" : "text-white/45")}>
-                    {usd(24)} {x.st === "done" ? "released" : "held"}
-                  </span>
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
       </section>
 
-      {/* ---------- Three views ---------- */}
-      <section className="container-x py-20 lg:py-28">
-        <div className="max-w-2xl">
-          <div className="eyebrow mb-3">One episode, three views</div>
-          <h2 className="h-section text-balance">Everyone sees exactly what they need. Nothing more.</h2>
+      {/* WHY */}
+      <section id="why" className="border-y border-line bg-white">
+        <div className="container-x py-16 lg:py-24">
+          <div className="max-w-2xl">
+            <div className="eyebrow">The problem</div>
+            <h2 className="mt-3 text-balance text-4xl font-extrabold sm:text-5xl">Families abroad fund care they can't see, can't limit and can't trust.</h2>
+          </div>
+          <div className="mt-10 grid grid-cols-1 divide-y divide-line rounded-3xl border border-line bg-canvas/40 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            {[
+              ["≈ $20B", "sent to Nigeria in 2024", "Diaspora remittances are one of the country's largest sources of foreign currency."],
+              ["≈ 75%", "of health spending is out of pocket", "When someone falls ill, the family pays first, often with money sent from abroad."],
+              ["Blind", "trust is the only control", "A standard transfer can't be restricted to a hospital, so the sender can only hope it is used for care."],
+            ].map(([n, l, d]) => (
+              <div key={l} className="px-6 py-7">
+                <div className="num text-5xl font-extrabold text-brand-700">{n}</div>
+                <div className="mt-1 font-bold">{l}</div>
+                <div className="mt-1 text-sm leading-relaxed text-ink-mute">{d}</div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-xs text-ink-faint">
+            Sources: Central Bank of Nigeria diaspora remittance data, reported by <a className="underline" href="https://nairametrics.com/2025/07/26/diaspora-remittances-to-nigeria-hit-20-93b-in-2024">Nairametrics</a> (2024 figures vary by source, roughly $19.8–20.9B); out-of-pocket share per a 2024 report summarised by <a className="underline" href="https://nairametrics.com/2024/09/03/out-of-pocket-expenses-dominate-nigerias-health-spending-at-75-report/">Nairametrics</a>.
+          </p>
         </div>
-        <div className="mt-12 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      </section>
+
+      {/* THREE INDUSTRIES */}
+      <section id="product" className="container-x py-20 lg:py-28">
+        <div className="max-w-2xl">
+          <div className="eyebrow">One product, three layers</div>
+          <h2 className="mt-3 text-balance text-4xl font-extrabold sm:text-5xl">Where healthtech, fintech and blockchain meet.</h2>
+          <p className="mt-5 text-lg leading-relaxed text-ink-soft">Each layer does one job. Together they make a transfer that can only become care.</p>
+        </div>
+        <div className="mt-12 grid grid-cols-1 gap-5 md:grid-cols-3">
           {[
-            { t: "Sponsor", tag: "You, abroad", href: "/sponsor", cta: "Open sponsor app", sees: ["Package, provider and progress", "Confirmations and receipts", "Money held and released"], never: ["Diagnoses or notes", "Intake documents"] },
-            { t: "Family", tag: "Your relative, at home", href: "/pass", cta: "Open family pass", sees: ["The next step and where to go", "A visit code to show", "What to bring"], never: ["Anything they didn’t share"] },
-            { t: "Provider", tag: "Hospital or lab", href: "/provider", cta: "Open provider desk", sees: ["Their own patients’ packages", "Intake documents", "Payout per confirmed step"], never: ["Other providers’ patients"] },
+            { icon: BadgeCheck, tag: "Healthtech", t: "A verified care network", d: "Hospitals, labs and pharmacies are vetted and categorised. Sponsors choose which kinds of care a pass covers, so the money follows the need.", status: "Working today" },
+            { icon: Landmark, tag: "Fintech", t: "Dollars in, Naira out", d: "Sponsors fund in USD or GBP with the fee shown up front. Licensed partners handle the conversion and the Naira payout to the clinic.", status: "Sandbox now · live funding next" },
+            { icon: Lock, tag: "Blockchain", t: "Rules nobody can bend", d: "USDC settles on Stellar. A Soroban contract enforces the whitelist, limits and freeze, and holds funds non-custodially, so the rules can be audited and not just promised.", status: "Live on testnet · mainnet next" },
           ].map((c) => (
-            <article key={c.t} className="card flex flex-col p-6">
-              <div className="flex items-baseline justify-between"><h3 className="text-2xl font-bold">{c.t}</h3><span className="text-[13px] font-medium text-ink-mute">{c.tag}</span></div>
-              <div className="mt-6 text-xs font-bold uppercase tracking-wider text-brand-700">Sees</div>
-              <ul className="mt-2.5 space-y-2.5">{c.sees.map((s) => <li key={s} className="flex items-start gap-2.5 text-sm"><Eye className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />{s}</li>)}</ul>
-              <div className="mt-5 text-xs font-bold uppercase tracking-wider text-ink-mute">Never sees</div>
-              <ul className="mt-2.5 space-y-2.5">{c.never.map((s) => <li key={s} className="flex items-start gap-2.5 text-sm text-ink-mute"><EyeOff className="mt-0.5 h-4 w-4 shrink-0" />{s}</li>)}</ul>
-              <Button href={c.href} variant="outline" full className="mt-auto" >{c.cta}</Button>
+            <article key={c.tag} className="card p-7">
+              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-700"><c.icon className="h-6 w-6" /></span>
+              <div className="eyebrow mt-6 !text-brand-700">{c.tag}</div>
+              <h3 className="mt-1 text-xl font-bold">{c.t}</h3>
+              <p className="mt-2 leading-relaxed text-ink-mute">{c.d}</p>
+              <span className="mt-6 inline-block rounded-full bg-sun-50 px-3.5 py-1.5 text-xs font-bold text-sun-600">{c.status}</span>
             </article>
           ))}
         </div>
       </section>
 
-      {/* ---------- Packages ---------- */}
-      <section id="network" className="border-y border-line bg-white py-20 lg:py-28">
-        <div className="container-x">
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <div className="max-w-2xl">
-              <div className="eyebrow mb-3">Care packages</div>
-              <h2 className="h-section text-balance">Clear scope. Clear price band. Clear steps.</h2>
-            </div>
-            <Button href="/packages" variant="outline">Explore inclusions and providers <ArrowRight className="h-4 w-4" /></Button>
+      {/* HOW */}
+      <section id="how" className="container-x py-20 lg:py-28">
+        <div className="max-w-2xl">
+          <div className="eyebrow">How it works</div>
+          <h2 className="mt-3 text-balance text-4xl font-extrabold sm:text-5xl">From your phone to their clinic in three steps.</h2>
+        </div>
+        <div className="mt-12 grid grid-cols-1 gap-5 md:grid-cols-3">
+          {[
+            { n: "01", icon: Users, t: "Add your family member", d: "Create a pass for a parent, sibling or relative. Set a monthly limit, a per-payment cap and the kinds of care it covers.", chip: "Mom · Lagos" },
+            { n: "02", icon: HandCoins, t: "Top up in dollars", d: "Fund with a card or bank transfer. You see the fee and the Naira value before you confirm.", chip: "$100 → ₦152,900" },
+            { n: "03", icon: ScanLine, t: "They pay at the clinic", d: "They scan the clinic's QR code or tap their pass. The guardrail checks the provider and your limits, then the payment settles.", chip: "Verified ✓ · seconds" },
+          ].map((s) => (
+            <article key={s.n} className="card group relative overflow-hidden p-7 transition hover:-translate-y-1 hover:shadow-pop">
+              <div className="flex items-center justify-between">
+                <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-700 transition group-hover:bg-brand-500 group-hover:text-white"><s.icon className="h-6 w-6" /></span>
+                <span className="num text-4xl font-extrabold text-canvas-2">{s.n}</span>
+              </div>
+              <h3 className="mt-6 text-xl font-bold">{s.t}</h3>
+              <p className="mt-2 leading-relaxed text-ink-mute">{s.d}</p>
+              <span className="mt-6 inline-block rounded-full bg-canvas px-3.5 py-1.5 text-xs font-bold text-ink-soft">{s.chip}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* SECURITY */}
+      <section id="security" className="bg-brand-950 text-white">
+        <div className="container-x grid grid-cols-1 gap-12 py-20 lg:grid-cols-2 lg:items-center lg:py-28">
+          <div>
+            <div className="eyebrow !text-brand-300">Guardrails</div>
+            <h2 className="mt-3 text-balance text-4xl font-extrabold sm:text-5xl">Rules enforced in code, not in a promise.</h2>
+            <p className="mt-5 max-w-lg text-lg leading-relaxed text-white/65">
+              Every payment is checked against the verified provider list and your limits before any money moves. A blocked payment never leaves the vault, and you can see the attempt.
+            </p>
+            <ul className="mt-8 space-y-4">
+              {[
+                [BadgeCheck, "Verified merchants only", "Hospitals, labs and pharmacies are vetted, then added to an on-chain registry."],
+                [SlidersHorizontal, "Your limits, per person", "A monthly limit, a per-payment cap and the care types allowed, set for each person."],
+                [Lock, "Non-custodial by design", "No pooled account. The rules are public and enforced by the contract."],
+              ].map(([I, t, d]) => {
+                const Icon = I as typeof Lock;
+                return (
+                  <li key={t as string} className="flex gap-4">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-500/20 text-brand-300"><Icon className="h-5 w-5" /></span>
+                    <div><div className="font-bold">{t as string}</div><div className="text-sm text-white/55">{d as string}</div></div>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-          <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {PACKAGES.map((p) => (
-              <article key={p.id} className="card card-hover flex flex-col p-6">
-                <PkgIcon id={p.icon} />
-                <h3 className="mt-5 text-lg font-bold">{p.name}</h3>
-                <p className="mt-1.5 flex-1 text-sm leading-relaxed text-ink-mute">{p.blurb}</p>
-                <div className="mt-5 border-t border-line pt-4">
-                  <div className="num text-xl font-bold">{usd(p.price[0], 0)} – {usd(p.price[1], 0)}</div>
-                  <div className="mt-0.5 text-xs font-medium text-ink-mute">{p.timeline} · {p.steps.length - 1} steps</div>
-                </div>
-              </article>
-            ))}
+          <LandingDemo />
+        </div>
+      </section>
+
+      <div className="border-y border-line bg-white/60"><PartnersSection /></div>
+
+      {/* AUDIENCES */}
+      <section className="container-x py-20 lg:py-28">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="rounded-[32px] bg-brand-50 p-8 sm:p-10">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-500 text-white"><Landmark className="h-6 w-6" /></span>
+            <h3 className="mt-6 text-3xl font-extrabold">For sponsors abroad</h3>
+            <p className="mt-2 text-ink-soft">Control and peace of mind from anywhere.</p>
+            <ul className="mt-6 space-y-3.5">
+              {["Fund in USD or GBP and see the Naira value up front", "See every payment and every blocked attempt", "Change limits or freeze a pass in one tap", "Answer top-up requests from family"].map((t) => (
+                <li key={t} className="flex gap-3"><Check className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" strokeWidth={3} /><span className="font-medium">{t}</span></li>
+              ))}
+            </ul>
+            <Button href="/sponsor" variant="dark" className="mt-8">Explore the sponsor app</Button>
+          </div>
+          <div className="rounded-[32px] bg-sun-50 p-8 sm:p-10">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-ink text-white"><Smartphone className="h-6 w-6" /></span>
+            <h3 className="mt-6 text-3xl font-extrabold">For family at home</h3>
+            <p className="mt-2 text-ink-soft">Simple enough for anyone to use, with no app to install.</p>
+            <ul className="mt-6 space-y-3.5">
+              {["One big button to pay: scan or tap", "Find verified clinics, labs and pharmacies nearby", "See the balance in dollars and Naira", "Ask for more funds with one tap"].map((t) => (
+                <li key={t} className="flex gap-3"><Check className="mt-0.5 h-5 w-5 shrink-0 text-sun-600" strokeWidth={3} /><span className="font-medium">{t}</span></li>
+              ))}
+            </ul>
+            <Button href="/pass" variant="dark" className="mt-8">Explore the family pass</Button>
           </div>
         </div>
       </section>
 
-      {/* ---------- Trust ---------- */}
-      <section id="trust" className="container-x py-20 lg:py-28">
-        <div className="grid grid-cols-1 gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
-          <div>
-            <div className="eyebrow mb-3">Trust &amp; privacy</div>
-            <h2 className="h-section text-balance">Built so medical information stays medical.</h2>
-            <p className="mt-5 max-w-md text-[17px] leading-relaxed text-ink-soft">
-              CarePass tracks milestones, not diagnoses. The people who need clinical detail have it. Everyone else gets proof.
-            </p>
+      {/* NETWORK */}
+      <section id="network" className="border-y border-line bg-white py-20 lg:py-24">
+        <div className="container-x">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div className="max-w-xl">
+              <div className="eyebrow">Provider network</div>
+              <h2 className="mt-3 text-balance text-4xl font-extrabold">Care providers on the verified list.</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map((c) => (
+                <span key={c.id} className="rounded-full border border-line px-3.5 py-1.5 text-[13px] font-semibold text-ink-soft">{c.plural}</span>
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {[
-              { icon: EyeOff, t: "Milestones only", d: "Sponsors see steps and confirmations. Never results, diagnoses or notes." },
-              { icon: Lock, t: "Documents stay private", d: "Intake documents are visible to the provider only, in access-controlled storage." },
-              { icon: KeyRound, t: "Code-confirmed visits", d: "A visit counts only when the provider enters the family’s code on the day." },
-              { icon: FileCheck, t: "Receipts without results", d: "Providers can attach an invoice. It must contain no clinical results." },
-            ].map((x) => (
-              <div key={x.t} className="card p-5">
-                <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-700"><x.icon className="h-5 w-5" /></span>
-                <h3 className="mt-4 font-bold">{x.t}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-ink-mute">{x.d}</p>
+          <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {MERCHANTS.slice(0, 6).map((m) => (
+              <div key={m.id} className="flex items-center gap-4 rounded-2xl border border-line bg-canvas/50 p-4">
+                <CatIcon type={m.type} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-bold">{m.name}</div>
+                  <div className="truncate text-sm text-ink-mute">{m.area}, {m.city}</div>
+                </div>
+                <BadgeCheck className="h-5 w-5 shrink-0 text-brand-500" aria-label="Verified" />
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ---------- Comparison ---------- */}
-      <section className="border-t border-line bg-white py-20 lg:py-28">
-        <div className="container-x">
-          <div className="max-w-2xl">
-            <div className="eyebrow mb-3">How it compares</div>
-            <h2 className="h-section text-balance">The gap between a transfer and a completed visit.</h2>
-          </div>
-          <div className="mt-10 overflow-x-auto rounded-2xl border border-line">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
-              <thead>
-                <tr className="bg-canvas">
-                  <th className="p-4 text-left font-semibold text-ink-mute"><span className="sr-only">Capability</span></th>
-                  {COMPARE_COLS.map((c, i) => (
-                    <th key={c} className={clsx("p-4 text-center text-[13px] font-bold", i === 0 && "bg-brand-50 text-brand-800")}>{c}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARE.map((r) => (
-                  <tr key={r.row} className="border-t border-line">
-                    <th scope="row" className="p-4 text-left font-semibold">{r.row}</th>
-                    {r.cols.map((c, i) => (
-                      <td key={i} className={clsx("p-4 text-center", i === 0 && "bg-brand-50/60")}>
-                        <span className="inline-flex items-center justify-center" aria-label={c === "yes" ? "Yes" : c === "part" ? "Partly" : "No"}>
-                          {c === "yes" ? <Check className="h-5 w-5 text-brand-600" strokeWidth={2.8} /> : c === "part" ? <Minus className="h-5 w-5 text-sun-500" strokeWidth={2.8} /> : <X className="h-5 w-5 text-ink-faint" />}
-                        </span>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-4 text-xs text-ink-mute">General comparison of categories, not of any single product. Telemedicine starts with a remote consult; HMOs cover members; transfers carry no structure or proof.</p>
+      {/* FAQ */}
+      <section id="faq" className="container-x grid grid-cols-1 gap-10 py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] lg:py-28">
+        <div>
+          <div className="eyebrow">FAQ</div>
+          <h2 className="mt-3 text-4xl font-extrabold sm:text-5xl">Questions, answered.</h2>
+          <p className="mt-4 text-ink-mute">Everything you'd want to know before sending your first dollar.</p>
+        </div>
+        <div className="divide-y divide-line rounded-3xl border border-line bg-white shadow-card">
+          {FAQ.map(([q, a]) => (
+            <details key={q} className="group px-6 py-5 [&_summary::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-bold">
+                {q}
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-canvas text-lg transition group-open:rotate-45 group-open:bg-brand-500 group-open:text-white">+</span>
+              </summary>
+              <p className="mt-3 pr-10 leading-relaxed text-ink-mute">{a}</p>
+            </details>
+          ))}
         </div>
       </section>
 
-      {/* ---------- FAQ ---------- */}
-      <section id="faq" className="container-x py-20 lg:py-28">
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
-          <div>
-            <div className="eyebrow mb-3">FAQ</div>
-            <h2 className="h-section text-balance">Questions, answered.</h2>
-            <p className="mt-4 text-ink-mute">Still unsure? Try the demo. It takes about three minutes.</p>
-            <Button href="/signin?mode=signup" className="mt-6">Try the demo <ArrowRight className="h-4 w-4" /></Button>
-          </div>
-          <div className="divide-y divide-line rounded-2xl border border-line bg-white">
-            {FAQ.map(([q, a]) => (
-              <details key={q} className="group px-5 py-1 sm:px-6">
-                <summary className="flex min-h-[60px] cursor-pointer list-none items-center justify-between gap-4 py-3 font-bold">
-                  {q}
-                  <ChevronDown className="h-5 w-5 shrink-0 text-ink-mute transition-transform group-open:rotate-180" />
-                </summary>
-                <p className="pb-4 pr-8 text-[15px] leading-relaxed text-ink-soft">{a}</p>
-              </details>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ---------- Final CTA ---------- */}
+      {/* CTA */}
       <section className="container-x pb-20 lg:pb-28">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 to-brand-950 p-8 text-white sm:p-14">
-          <div className="grain pointer-events-none absolute inset-0" />
-          <div className="relative flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-center">
-            <div className="max-w-xl">
-              <h2 className="text-balance text-[32px] font-bold sm:text-[44px]">Start with one package for one person.</h2>
-              <p className="mt-3 text-white/70">Add a family member, choose a package and a provider, and follow every step. {MERCHANTS.length} partner facilities across Lagos and Abuja are ready.</p>
-            </div>
-            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-              <Button href="/signin?mode=signup" size="lg" variant="light">Get started <ArrowRight className="h-5 w-5" /></Button>
-              <Button href="/packages" size="lg" variant="glass">Browse packages</Button>
+        <div className="relative overflow-hidden rounded-[36px] bg-brand-500 px-8 py-14 text-center text-white sm:py-20">
+          <div className="grain absolute inset-0" />
+          <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-white/10" />
+          <div className="absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-brand-900/30" />
+          <div className="relative">
+            <Timer className="mx-auto h-8 w-8 text-brand-100" />
+            <h2 className="mx-auto mt-5 max-w-2xl text-balance text-4xl font-extrabold sm:text-5xl">Be there for them, even from far away.</h2>
+            <p className="mx-auto mt-4 max-w-md text-brand-50">Create a pass, add funds, and know where every dollar goes.</p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+              <Button href="/signin?mode=signup" size="lg" variant="light">Create your account <ArrowRight className="h-5 w-5" /></Button>
+              <Button href="/guardrails" size="lg" className="!bg-brand-700 hover:!bg-brand-800" icon={<Zap className="h-5 w-5" />}>Try the guardrail lab</Button>
             </div>
           </div>
         </div>

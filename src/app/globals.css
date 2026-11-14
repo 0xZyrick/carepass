@@ -11,20 +11,18 @@
   html {
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
-    scroll-padding-top: 5.5rem;
+    scroll-padding-top: 5rem;
   }
   body {
-    @apply bg-canvas font-sans text-[15px] leading-relaxed text-ink antialiased;
+    @apply bg-canvas font-sans text-ink antialiased;
     text-rendering: optimizeLegibility;
     overflow-x: hidden;
   }
   h1,
   h2,
-  h3,
-  h4 {
+  h3 {
     @apply font-display;
-    letter-spacing: -0.028em;
-    line-height: 1.12;
+    letter-spacing: -0.025em;
   }
   ::selection {
     @apply bg-brand-200 text-brand-950;
@@ -34,12 +32,8 @@
   }
   button,
   a,
-  summary,
-  label {
+  summary {
     -webkit-tap-highlight-color: transparent;
-  }
-  button {
-    @apply cursor-pointer;
   }
   input,
   select,
@@ -50,26 +44,32 @@
     input,
     select,
     textarea {
-      font-size: 15px;
+      font-size: 14px;
     }
   }
-  summary::-webkit-details-marker {
-    display: none;
+  input[type="range"] {
+    @apply h-2 w-full cursor-pointer appearance-none rounded-full bg-canvas-2;
+    background-image: linear-gradient(#00a86b, #00a86b);
+    background-repeat: no-repeat;
+    background-size: var(--fill, 0%) 100%;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    @apply h-6 w-6 appearance-none rounded-full border-4 border-white bg-brand-500 shadow-card;
+  }
+  input[type="range"]::-moz-range-thumb {
+    @apply h-6 w-6 rounded-full border-4 border-white bg-brand-500 shadow-card;
   }
 }
 
 @layer components {
   .container-x {
-    @apply mx-auto w-full max-w-[1200px] px-5 sm:px-8;
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
   }
   .eyebrow {
     @apply text-[11px] font-bold uppercase tracking-[0.14em] text-ink-mute;
   }
   .card {
-    @apply rounded-2xl border border-line bg-white shadow-card;
-  }
-  .card-hover {
-    @apply transition duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-raise;
+    @apply rounded-3xl border border-line bg-white shadow-card;
   }
   .num {
     @apply font-display tabular-nums;
@@ -82,32 +82,11 @@
     display: none;
   }
   .grain {
-    background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
-    background-size: 20px 20px;
-  }
-  .grid-fade {
-    background-image: linear-gradient(rgba(14, 27, 46, 0.045) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(14, 27, 46, 0.045) 1px, transparent 1px);
-    background-size: 44px 44px;
-    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
-    mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
+    background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+    background-size: 18px 18px;
   }
   .pb-safe {
     padding-bottom: max(0.75rem, var(--safe-bottom));
-  }
-  .h-section {
-    @apply text-[30px] font-bold sm:text-[38px] lg:text-[44px];
-  }
-  .ticket-notch::before,
-  .ticket-notch::after {
-    content: "";
-    @apply absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-[#F7F9FC];
-  }
-  .ticket-notch::before {
-    left: -10px;
-  }
-  .ticket-notch::after {
-    right: -10px;
   }
 }
 

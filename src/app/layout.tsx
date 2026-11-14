@@ -7,13 +7,13 @@ import { StoreProvider } from "@/lib/store";
 import { ToastHost } from "@/components/ui/ui";
 
 export const metadata: Metadata = {
-  title: { default: "CarePass — Care for family back home, start to finish", template: "%s · CarePass" },
+  title: { default: "CarePass — Send care, not cash", template: "%s · CarePass" },
   description:
-    "Choose a care package, pick a vetted provider, and follow every step until care is completed for family in Nigeria.",
+    "CarePass lets you fund a relative's medical care abroad with rules you control. The money can only be spent at verified hospitals, labs and pharmacies, and every payment is visible to you.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#072A31",
+  themeColor: "#052619",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

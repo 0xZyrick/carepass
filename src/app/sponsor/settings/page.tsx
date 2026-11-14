@@ -1,68 +1,58 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Bell, ChevronRight, CircleHelp, CreditCard, KeyRound, LogOut, Mail, ScrollText } from "lucide-react";
-import { Avatar, Button, IconTile, PageHeader, Toggle } from "@/components/ui/ui";
+import { Bell, ChevronRight, CreditCard, KeyRound, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { Avatar, Button, PageHeader, Toggle } from "@/components/ui/ui";
 import { useStore } from "@/lib/store";
-import { SPONSOR } from "@/lib/data";
-
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-8">
-      <h2 className="mb-2 px-1 text-[12px] font-bold uppercase tracking-[0.12em] text-ink-mute">{title}</h2>
-      <div className="card divide-y divide-line">{children}</div>
-    </section>
-  );
-}
-
-function Item({ icon: I, title, sub, right, href, onClick }: { icon: typeof Bell; title: string; sub?: string; right?: React.ReactNode; href?: string; onClick?: () => void }) {
-  const inner = (
-    <>
-      <IconTile tone="ink" size={40}><I className="h-5 w-5" /></IconTile>
-      <div className="min-w-0 flex-1 text-left"><div className="text-[15px] font-semibold">{title}</div>{sub && <div className="text-[13px] text-ink-mute">{sub}</div>}</div>
-      {right ?? <ChevronRight className="h-5 w-5 text-ink-faint" />}
-    </>
-  );
-  const cls = "flex w-full items-center gap-4 px-4 py-3.5 sm:px-5";
-  if (href) return <Link href={href} className={cls + " transition hover:bg-canvas/60"}>{inner}</Link>;
-  if (onClick) return <button onClick={onClick} className={cls + " transition hover:bg-canvas/60"}>{inner}</button>;
-  return <div className={cls}>{inner}</div>;
-}
 
 export default function Settings() {
-  const { toast } = useStore();
-  const [n, setN] = useState({ pay: true, weekly: false, email: true });
+  const router = useRouter();
+  const { toast, me, signOut, seedDemo, previewEnabled } = useStore();
+  const initials = (me?.name ?? "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  const [n, setN] = useState({ pay: true, block: true, low: true, weekly: false });
   const [twofa, setTwofa] = useState(true);
   const set = (k: keyof typeof n) => (v: boolean) => { setN({ ...n, [k]: v }); toast("Preference saved"); };
+
+  const Row = ({ icon: I, title, sub, right }: { icon: typeof Bell; title: string; sub?: string; right: React.ReactNode }) => (
+    <div className="flex items-center gap-4 px-5 py-4">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-canvas text-ink-soft"><I className="h-5 w-5" /></span>
+      <div className="min-w-0 flex-1"><div className="font-semibold">{title}</div>{sub && <div className="text-sm text-ink-mute">{sub}</div>}</div>
+      {right}
+    </div>
+  );
 
   return (
     <div className="mx-auto max-w-2xl animate-fade-in">
       <PageHeader title="Settings" />
       <section className="card flex items-center gap-4 p-5">
-        <Avatar initials={SPONSOR.initials} hue="sun" size={60} />
-        <div className="min-w-0 flex-1"><div className="text-lg font-bold">{SPONSOR.name}</div><div className="truncate text-sm text-ink-mute">{SPONSOR.email} · {SPONSOR.location}</div></div>
-        <Button variant="outline" size="sm" onClick={() => toast("Profile editing is coming soon", "warn")}>Edit</Button>
+        <Avatar initials={initials} hue="sun" size={60} />
+        <div className="min-w-0 flex-1"><div className="truncate text-lg font-bold">{me?.name}</div><div className="truncate text-sm text-ink-mute">{me?.email}</div></div>
+        <Button variant="outline" size="sm" onClick={() => toast("Profile editing is not available yet", "warn")}>Edit</Button>
       </section>
 
-      <Group title="Notifications">
-        <Item icon={Bell} title="Step confirmed" sub="When a provider confirms a step" right={<Toggle label="Step confirmed" checked={n.pay} onChange={set("pay")} />} />
-        <Item icon={Mail} title="Email receipts" sub="For every payment you make" right={<Toggle label="Email receipts" checked={n.email} onChange={set("email")} />} />
-        <Item icon={Bell} title="Weekly summary" sub="Every Monday morning" right={<Toggle label="Weekly summary" checked={n.weekly} onChange={set("weekly")} />} />
-      </Group>
+      <h2 className="mb-2 mt-8 px-1 font-sans text-[13px] font-bold uppercase tracking-wider text-ink-mute">Notifications</h2>
+      <div className="card divide-y divide-line/70">
+        <Row icon={Bell} title="Clinic payments" sub="When a pass is used at a clinic" right={<Toggle label="Clinic payments" checked={n.pay} onChange={set("pay")} />} />
+        <Row icon={ShieldCheck} title="Blocked attempts" sub="When a guardrail rejects a payment" right={<Toggle label="Blocked attempts" checked={n.block} onChange={set("block")} />} />
+        <Row icon={Bell} title="Low balance" sub="When a pass drops under $25" right={<Toggle label="Low balance" checked={n.low} onChange={set("low")} />} />
+        <Row icon={Bell} title="Weekly summary" sub="Every Monday morning" right={<Toggle label="Weekly summary" checked={n.weekly} onChange={set("weekly")} />} />
+      </div>
 
-      <Group title="Payments & security">
-        <Item icon={CreditCard} title="Payment methods" sub="Visa •••• 4242 · Bank account" onClick={() => toast("Managing payment methods is coming soon", "warn")} />
-        <Item icon={KeyRound} title="Two-factor authentication" sub="Extra protection when you sign in" right={<Toggle label="Two-factor authentication" checked={twofa} onChange={(v) => { setTwofa(v); toast(v ? "2FA enabled" : "2FA disabled", v ? "ok" : "warn"); }} />} />
-      </Group>
+      <h2 className="mb-2 mt-8 px-1 font-sans text-[13px] font-bold uppercase tracking-wider text-ink-mute">Payments & security</h2>
+      <div className="card divide-y divide-line/70">
+        <Row icon={CreditCard} title="Payment methods" sub="Visa •••• 4242 · Bank account" right={<ChevronRight className="h-5 w-5 text-ink-faint" />} />
+        <Row icon={KeyRound} title="Two-factor authentication" sub="Extra protection when you sign in" right={<Toggle label="Two-factor authentication" checked={twofa} onChange={(v) => { setTwofa(v); toast(v ? "2FA enabled" : "2FA disabled", v ? "ok" : "warn"); }} />} />
+        <Row icon={UserRound} title="Guardrail lab" sub="See how every payment is checked" right={<Link href="/guardrails" className="rounded-lg px-2 py-1 text-sm font-semibold text-brand-700 hover:bg-brand-50">Open</Link>} />
+      </div>
 
-      <Group title="Help">
-        <Item icon={ScrollText} title="Care packages" sub="Browse packages and providers" href="/packages" />
-        <Item icon={CircleHelp} title="How CarePass works" sub="Questions and answers" href="/#faq" />
-      </Group>
-
-      <Button href="/signin" variant="danger" size="lg" full className="mt-8" icon={<LogOut className="h-5 w-5" />}>Sign out</Button>
-      <p className="mt-6 text-center text-xs text-ink-faint">CarePass prototype · demo data only</p>
+      {previewEnabled && (
+        <Button variant="outline" size="lg" full className="mt-8" onClick={async () => { if (confirm("Replace your family passes with the sample family? This deletes your current passes and history.") && (await seedDemo(true))) toast("Sample data loaded"); }}>
+          Reset to sample data
+        </Button>
+      )}
+      <Button variant="danger" size="lg" full className="mt-4" icon={<LogOut className="h-5 w-5" />} onClick={async () => { await signOut(); router.push("/signin"); }}>Sign out</Button>
     </div>
   );
 }

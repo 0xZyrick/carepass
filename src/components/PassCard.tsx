@@ -28,9 +28,9 @@ export function PassCard({
 
       <div className="flex items-start justify-between">
         <div>
-          <div className="font-display text-[15px] font-extrabold tracking-tight">CarePass</div>
+          <div className="font-display text-[16px] font-semibold tracking-tight">CarePass</div>
           <div className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-white/75">
-            <Lock className="h-3 w-3" /> Merchant-locked
+            <Lock className="h-3 w-3" /> Clinics only
           </div>
         </div>
         <Nfc className="h-6 w-6 rotate-90 text-white/80" aria-hidden />

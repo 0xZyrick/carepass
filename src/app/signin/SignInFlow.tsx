@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Landmark, Loader2, Smartphone } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Hospital, Landmark, Loader2, Smartphone } from "lucide-react";
 import clsx from "clsx";
 import { Button, Logo } from "@/components/ui/ui";
 import { PassCard } from "@/components/PassCard";
 import { authClient } from "@/lib/auth-client";
 import { useStore } from "@/lib/store";
 
-type Role = "sponsor" | "family";
+type Role = "sponsor" | "family" | "clinic";
+const HOME: Record<Role, string> = { sponsor: "/sponsor", family: "/pass", clinic: "/clinic" };
 
 export function SignInFlow() {
   const router = useRouter();
@@ -76,7 +77,8 @@ export function SignInFlow() {
     const j = await r.json().catch(() => ({}));
     const finalRole: Role = r.ok || r.status === 409 ? (j.role as Role) : role;
     await refresh(); // load this account's data into the app before navigating
-    router.replace(params.get("next") && params.get("next")!.startsWith(finalRole === "sponsor" ? "/sponsor" : "/pass") ? params.get("next")! : finalRole === "sponsor" ? "/sponsor" : "/pass");
+    const next = params.get("next");
+    router.replace(next && next.startsWith(HOME[finalRole]) ? next : HOME[finalRole]);
     router.refresh();
   }
 
@@ -103,9 +105,9 @@ export function SignInFlow() {
         <div className="relative">
           <div className="mx-auto mb-12 max-w-[360px] -rotate-3"><PassCard name="Adebola Okonkwo" balance={186.4} last4="8842" /></div>
           <h2 className="max-w-md text-4xl font-extrabold leading-tight">Every dollar you send reaches care.</h2>
-          <p className="mt-4 max-w-md text-white/60">Locked to verified providers, non-custodial and fully visible to you.</p>
+          <p className="mt-4 max-w-md text-white/60">Money for care can only be spent at verified clinics, labs and pharmacies, and you see every payment.</p>
         </div>
-        <div className="relative text-sm text-white/40">© 2026 CarePass · Running on Stellar testnet</div>
+        <div className="relative text-sm text-white/40">© 2026 CarePass</div>
       </aside>
 
       <main className="flex flex-col px-5 pb-8 pt-5 sm:px-10">
@@ -118,10 +120,10 @@ export function SignInFlow() {
           {step === "id" ? (
             <form onSubmit={sendCode} className="animate-fade-up">
               <h1 className="text-[34px] font-extrabold leading-tight">{signup ? "Create your account" : "Welcome back"}</h1>
-              <p className="mt-2 text-ink-mute">{signup ? "Start funding care for your family in minutes." : "Sign in to continue to CarePass."}</p>
+              <p className="mt-2 text-ink-mute">{signup ? "Pick how you will use CarePass." : "Sign in to continue to CarePass."}</p>
 
-              <div className="mt-8 grid grid-cols-2 gap-2 rounded-2xl bg-canvas-2 p-1.5" role="tablist" aria-label="I am a">
-                {([["sponsor", "I'm sending support", Landmark], ["family", "I'm receiving care", Smartphone]] as const).map(([r, l, I]) => (
+              <div className="mt-8 grid grid-cols-3 gap-2 rounded-2xl bg-canvas-2 p-1.5" role="tablist" aria-label="I am a">
+                {([["sponsor", "I'm sending support", Landmark], ["family", "I'm receiving care", Smartphone], ["clinic", "I run a clinic", Hospital]] as const).map(([r, l, I]) => (
                   <button key={r} type="button" role="tab" aria-selected={role === r} onClick={() => { setRole(r); setErr(""); }}
                     className={clsx("flex flex-col items-center gap-1.5 rounded-xl px-2 py-3.5 text-[13px] font-bold transition", role === r ? "bg-white text-ink shadow-card" : "text-ink-mute hover:text-ink")}>
                     <I className={clsx("h-5 w-5", role === r && "text-brand-600")} />{l}

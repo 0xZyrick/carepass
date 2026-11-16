@@ -59,7 +59,7 @@ export default function Detail() {
 
         <section className="card h-fit p-5 sm:p-7">
           <h2 className="text-xl font-bold">Spending rules</h2>
-          <p className="mb-7 mt-1 text-sm text-ink-mute">Enforced by the guardrail on every payment.</p>
+          <p className="mb-7 mt-1 text-sm text-ink-mute">Checked on every payment.</p>
           {rules && <RulesEditor rules={rules} onChange={setRules} />}
           <div className={`sticky bottom-24 mt-7 grid grid-cols-[1fr_auto] gap-3 transition lg:static ${dirty ? "opacity-100" : "pointer-events-none opacity-40"}`}>
             <Button size="lg" full icon={<Save className="h-4 w-4" />} onClick={() => { updateBeneficiary(b.id, rules!); toast("Spending rules saved"); }}>Save changes</Button>

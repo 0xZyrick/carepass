@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, LayoutDashboard, Plus, Receipt, Settings, ShieldCheck, Smartphone, Users } from "lucide-react";
+import { Bell, LayoutDashboard, Plus, Receipt, Settings, Users } from "lucide-react";
 import clsx from "clsx";
 import { Avatar, Logo } from "@/components/ui/ui";
-import { DemoPill } from "@/components/DemoPill";
-import { FirstFamily, Loading } from "@/components/States";
+import { FirstFamily } from "@/components/States";
+import { SponsorSkeleton } from "@/components/Skeletons";
 import { useStore } from "@/lib/store";
 
 const NAV = [
@@ -29,7 +29,7 @@ export function SponsorShell({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-white px-4 py-6 lg:flex">
         <Link href="/" className="px-3" aria-label="CarePass home"><Logo /></Link>
-        <Link href="/sponsor/fund" className="mt-8 flex h-12 items-center justify-center gap-2 rounded-2xl bg-brand-500 text-sm font-bold text-white shadow-glow transition hover:bg-brand-600 active:scale-[0.98]">
+        <Link href="/sponsor/fund" className="mt-8 flex h-12 items-center justify-center gap-2 rounded-2xl bg-brand-500 text-[15px] font-bold text-white shadow-glow transition hover:bg-brand-600 active:scale-[0.98]">
           <Plus className="h-5 w-5" strokeWidth={2.6} /> Fund care
         </Link>
         <nav className="mt-6 flex flex-col gap-1" aria-label="Sponsor">
@@ -40,17 +40,9 @@ export function SponsorShell({ children }: { children: React.ReactNode }) {
               {n.href === "/sponsor" && requests.length > 0 && <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white">{requests.length}</span>}
             </Link>
           ))}
-          <Link href="/guardrails" className="flex h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-semibold text-ink-soft transition hover:bg-canvas">
-            <ShieldCheck className="h-5 w-5" /> Guardrail lab
-          </Link>
         </nav>
 
         <div className="mt-auto space-y-3">
-          <DemoPill className="w-full justify-center" />
-          <Link href="/pass" className="flex items-center gap-3 rounded-2xl bg-sun-50 p-3.5 text-sm font-semibold text-sun-600 transition hover:bg-sun-100">
-            <Smartphone className="h-5 w-5" />
-            <span className="leading-tight">Preview family pass<span className="block text-xs font-medium opacity-80">See what they see</span></span>
-          </Link>
           <div className="flex items-center gap-3 rounded-2xl border border-line p-3">
             <Avatar initials={initials} hue="sun" size={38} />
             <div className="min-w-0 leading-tight">
@@ -67,7 +59,6 @@ export function SponsorShell({ children }: { children: React.ReactNode }) {
           <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-line bg-canvas/90 px-5 backdrop-blur-xl lg:hidden" style={{ paddingTop: "var(--safe-top)" }}>
             <Link href="/" aria-label="CarePass home"><Logo /></Link>
             <div className="flex items-center gap-1">
-              <Link href="/pass" aria-label="Preview family pass" className="grid h-10 w-10 place-items-center rounded-full text-ink-soft hover:bg-canvas-2"><Smartphone className="h-5 w-5" /></Link>
               <Link href="/sponsor" aria-label={`Notifications${requests.length ? `, ${requests.length} new` : ""}`} className="relative grid h-10 w-10 place-items-center rounded-full text-ink-soft hover:bg-canvas-2">
                 <Bell className="h-5 w-5" />
                 {requests.length > 0 && <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-canvas" />}
@@ -76,7 +67,7 @@ export function SponsorShell({ children }: { children: React.ReactNode }) {
           </header>
         )}
 
-        <main className={clsx("mx-auto w-full max-w-5xl px-5 pt-6 sm:px-8 lg:pt-10", fundFlow ? "pb-10" : "pb-32 lg:pb-16")}>{loading ? <Loading /> : needsFirst ? <FirstFamily /> : children}</main>
+        <main className={clsx("mx-auto w-full max-w-5xl px-5 pt-6 sm:px-8 lg:pt-10", fundFlow ? "pb-10" : "pb-32 lg:pb-16")}>{loading ? <SponsorSkeleton /> : needsFirst ? <FirstFamily /> : children}</main>
 
         {/* Mobile bottom nav */}
         {!fundFlow && (

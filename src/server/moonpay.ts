@@ -1,5 +1,6 @@
 import "server-only";
 import crypto from "node:crypto";
+import { buildWidgetUrl } from "./moonpay-core";
 
 const env = () => ({
   secret: process.env.MOONPAY_SECRET_KEY ?? "",
@@ -8,26 +9,25 @@ const env = () => ({
   currency: process.env.MOONPAY_CURRENCY_CODE ?? "xlm_testnet",
 });
 
-export const moonpayEnabled = () => !!(env().secret && env().publishable);
+export const moonpayEnabled = () => !!(env().secret && env().publishable) && process.env.FUNDING_MODE !== "sandbox";
 export const moonpayIsSandbox = () => !env().publishable.startsWith("pk_live");
 export const MOONPAY_MIN_USD = 20; // MoonPay's minimum purchase
 
-/** Builds the hosted checkout URL and signs it (HMAC-SHA256 of the query string, base64, appended last). */
+/** Builds the hosted checkout URL and signs it (see moonpay-core.ts). */
 export function buildCheckoutUrl(o: { walletAddress: string; chargeUsd: number; externalId: string }) {
   const e = env();
-  const base = moonpayIsSandbox() ? "https://buy-sandbox.moonpay.com" : "https://buy.moonpay.com";
-  const q = new URLSearchParams({
-    apiKey: e.publishable,
-    currencyCode: e.currency,
-    walletAddress: o.walletAddress,
-    baseCurrencyCode: "usd",
-    baseCurrencyAmount: o.chargeUsd.toFixed(2),
-    externalTransactionId: o.externalId,
-    colorCode: "#00A86B",
-  });
-  const unsigned = `${base}?${q.toString()}`;
-  const sig = crypto.createHmac("sha256", e.secret).update(new URL(unsigned).search).digest("base64");
-  return `${unsigned}&signature=${encodeURIComponent(sig)}`;
+  return buildWidgetUrl({ sandbox: moonpayIsSandbox(), publishable: e.publishable, secret: e.secret, currency: e.currency, ...o });
+}
+
+/** Safe description of the configured keys (never the keys themselves), to spot copy-paste mistakes. */
+export function describeKeys() {
+  const e = env();
+  const shape = (k: string, prefix: string) => ({ present: !!k, prefixOk: k.startsWith(prefix), length: k.length, hasWhitespaceOrQuotes: /[\s"'`]/.test(k) });
+  return {
+    publishable: shape(e.publishable, "pk_"), secret: shape(e.secret, "sk_"), webhook: shape(e.webhookKey, "wk_"),
+    mode: moonpayIsSandbox() ? "sandbox" : "live", currency: e.currency, forcedSandboxFunding: process.env.FUNDING_MODE === "sandbox",
+    bothTest: e.publishable.startsWith("pk_test") === e.secret.startsWith("sk_test"),
+  };
 }
 
 /** Verifies the `Moonpay-Signature-V2` header: `t=<timestamp>,s=<hex hmac of "<t>.<raw body>">`. */

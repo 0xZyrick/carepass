@@ -2,26 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Bell, ChevronRight, CreditCard, KeyRound, LogOut, ShieldCheck, UserRound } from "lucide-react";
-import { Avatar, Button, PageHeader, Toggle } from "@/components/ui/ui";
+import { LogOut } from "lucide-react";
+import { Avatar, Button, PageHeader } from "@/components/ui/ui";
 import { useStore } from "@/lib/store";
 
 export default function Settings() {
   const router = useRouter();
-  const { toast, me, signOut, seedDemo, previewEnabled } = useStore();
+  const { toast, me, signOut, seedDemo, previewEnabled, beneficiaries } = useStore();
   const initials = (me?.name ?? "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
-  const [n, setN] = useState({ pay: true, block: true, low: true, weekly: false });
-  const [twofa, setTwofa] = useState(true);
-  const set = (k: keyof typeof n) => (v: boolean) => { setN({ ...n, [k]: v }); toast("Preference saved"); };
-
-  const Row = ({ icon: I, title, sub, right }: { icon: typeof Bell; title: string; sub?: string; right: React.ReactNode }) => (
-    <div className="flex items-center gap-4 px-5 py-4">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-canvas text-ink-soft"><I className="h-5 w-5" /></span>
-      <div className="min-w-0 flex-1"><div className="font-semibold">{title}</div>{sub && <div className="text-sm text-ink-mute">{sub}</div>}</div>
-      {right}
-    </div>
-  );
 
   return (
     <div className="mx-auto max-w-2xl animate-fade-in">
@@ -29,30 +17,26 @@ export default function Settings() {
       <section className="card flex items-center gap-4 p-5">
         <Avatar initials={initials} hue="sun" size={60} />
         <div className="min-w-0 flex-1"><div className="truncate text-lg font-bold">{me?.name}</div><div className="truncate text-sm text-ink-mute">{me?.email}</div></div>
-        <Button variant="outline" size="sm" onClick={() => toast("Profile editing is not available yet", "warn")}>Edit</Button>
       </section>
 
-      <h2 className="mb-2 mt-8 px-1 font-sans text-[13px] font-bold uppercase tracking-wider text-ink-mute">Notifications</h2>
-      <div className="card divide-y divide-line/70">
-        <Row icon={Bell} title="Clinic payments" sub="When a pass is used at a clinic" right={<Toggle label="Clinic payments" checked={n.pay} onChange={set("pay")} />} />
-        <Row icon={ShieldCheck} title="Blocked attempts" sub="When a guardrail rejects a payment" right={<Toggle label="Blocked attempts" checked={n.block} onChange={set("block")} />} />
-        <Row icon={Bell} title="Low balance" sub="When a pass drops under $25" right={<Toggle label="Low balance" checked={n.low} onChange={set("low")} />} />
-        <Row icon={Bell} title="Weekly summary" sub="Every Monday morning" right={<Toggle label="Weekly summary" checked={n.weekly} onChange={set("weekly")} />} />
-      </div>
-
-      <h2 className="mb-2 mt-8 px-1 font-sans text-[13px] font-bold uppercase tracking-wider text-ink-mute">Payments & security</h2>
-      <div className="card divide-y divide-line/70">
-        <Row icon={CreditCard} title="Payment methods" sub="Visa •••• 4242 · Bank account" right={<ChevronRight className="h-5 w-5 text-ink-faint" />} />
-        <Row icon={KeyRound} title="Two-factor authentication" sub="Extra protection when you sign in" right={<Toggle label="Two-factor authentication" checked={twofa} onChange={(v) => { setTwofa(v); toast(v ? "2FA enabled" : "2FA disabled", v ? "ok" : "warn"); }} />} />
-        <Row icon={UserRound} title="Guardrail lab" sub="See how every payment is checked" right={<Link href="/guardrails" className="rounded-lg px-2 py-1 text-sm font-semibold text-brand-700 hover:bg-brand-50">Open</Link>} />
+      <div className="card mt-6 divide-y divide-line/70 text-[15px] font-semibold">
+        <Link href="/terms" className="block px-5 py-4 hover:bg-canvas">Terms of use</Link>
+        <Link href="/privacy" className="block px-5 py-4 hover:bg-canvas">Privacy policy</Link>
+        <Link href="/about" className="block px-5 py-4 hover:bg-canvas">How CarePass works</Link>
       </div>
 
       {previewEnabled && (
-        <Button variant="outline" size="lg" full className="mt-8" onClick={async () => { if (confirm("Replace your family passes with the sample family? This deletes your current passes and history.") && (await seedDemo(true))) toast("Sample data loaded"); }}>
-          Reset to sample data
-        </Button>
+        <section className="mt-8 rounded-3xl border border-dashed border-line-strong p-5">
+          <h2 className="font-sans text-sm font-bold">Sample data</h2>
+          <p className="mt-1 text-sm text-ink-mute">For trying CarePass out. Adds a sample family with a few weeks of history.</p>
+          <Button variant="outline" className="mt-4" onClick={async () => {
+            const has = beneficiaries.length > 0;
+            if (has && !confirm("Replace your family members with the sample family? This deletes your current passes and history.")) return;
+            if (await seedDemo(has)) toast("Sample data loaded");
+          }}>{beneficiaries.length ? "Replace with sample family" : "Load sample family"}</Button>
+        </section>
       )}
-      <Button variant="danger" size="lg" full className="mt-4" icon={<LogOut className="h-5 w-5" />} onClick={async () => { await signOut(); router.push("/signin"); }}>Sign out</Button>
+      <Button variant="danger" size="lg" full className="mt-8" icon={<LogOut className="h-5 w-5" />} onClick={async () => { await signOut(); router.push("/signin"); }}>Sign out</Button>
     </div>
   );
 }

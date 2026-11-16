@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Loader2, MessageSquareText, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, Loader2, Mail, MessageCircle, X } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "@/components/ui/ui";
 import { PassCard } from "@/components/PassCard";
@@ -16,7 +16,7 @@ const input = "mt-2 h-[52px] w-full rounded-2xl border border-line-strong bg-whi
 
 export default function NewFamily() {
   const router = useRouter();
-  const { addBeneficiary, setActivePassId, me } = useStore();
+  const { addBeneficiary, setActivePassId, me, toast } = useStore();
   const [step, setStep] = useState(0);
   const [fullName, setFullName] = useState("");
   const [relation, setRelation] = useState("Mom");
@@ -38,16 +38,21 @@ export default function NewFamily() {
     if (b) setCreated(b);
   }
 
+  const invite = created ? `Hi ${created.name}, ${me?.name.split(" ")[0] ?? "your sponsor"} set up a CarePass for your medical care. Open ${typeof window !== "undefined" ? window.location.origin : ""}/signin, choose "I'm receiving care" and sign in with ${created.email}.` : "";
   if (created)
     return (
       <div className="mx-auto max-w-md animate-fade-up py-4 text-center">
         <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand-500 text-white shadow-glow"><Check className="h-8 w-8" strokeWidth={3} /></span>
-        <h1 className="mt-6 text-3xl font-extrabold">{created.name}'s pass is ready</h1>
-        <p className="mt-2 text-ink-mute">Ask them to sign in with <strong className="break-all text-ink">{created.email}</strong> to see it.</p>
+        <h1 className="mt-6 font-display text-3xl font-semibold">{created.name}'s pass is ready</h1>
+        <p className="mt-2 text-ink-mute">Send them an invite. They sign in with <strong className="break-all text-ink">{created.email}</strong> to see it.</p>
         <div className="mx-auto mt-7 max-w-[320px]"><PassCard name={created.fullName} balance={0} last4={created.last4} hue={created.hue} compact /></div>
-        <div className="mt-6 flex items-start gap-3 rounded-2xl bg-white p-4 text-left text-sm shadow-card">
-          <MessageSquareText className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
-          <p className="text-ink-soft">Tell {created.name}: “{me?.name.split(" ")[0] ?? "Your sponsor"} set up a CarePass for your medical care. Choose <em>I'm receiving care</em> and sign in with your email.”</p>
+        <div className="mt-6 rounded-2xl bg-white p-4 text-left text-sm shadow-card">
+          <p className="text-ink-soft">{invite}</p>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <a href={`https://wa.me/${created.phone ? created.phone.replace(/\D/g, "") : ""}?text=${encodeURIComponent(invite)}`} target="_blank" rel="noreferrer" className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-brand-500 text-[13px] font-bold text-white"><MessageCircle className="h-4 w-4" /> WhatsApp</a>
+            <a href={`mailto:${created.email}?subject=${encodeURIComponent("Your CarePass is ready")}&body=${encodeURIComponent(invite)}`} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-line-strong text-[13px] font-bold"><Mail className="h-4 w-4" /> Email</a>
+            <button onClick={() => { navigator.clipboard?.writeText(invite).catch(() => {}); toast("Message copied"); }} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-line-strong text-[13px] font-bold"><Copy className="h-4 w-4" /> Copy</button>
+          </div>
         </div>
         <div className="mt-7 grid gap-3">
           <Button size="lg" full onClick={() => router.push(`/sponsor/fund?to=${created.id}`)}>Add first funds</Button>
@@ -69,7 +74,7 @@ export default function NewFamily() {
       <div key={step} className="animate-fade-in">
         {step === 0 && (
           <>
-            <h1 className="text-3xl font-extrabold sm:text-4xl">Who's the pass for?</h1>
+            <h1 className="font-display text-3xl font-semibold sm:text-4xl">Who's the pass for?</h1>
             <p className="mt-2 text-ink-mute">They sign in with their email. No app download required.</p>
             <label className="mt-8 block"><span className="text-sm font-semibold">Full name</span>
               <input className={input} value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Adebola Okonkwo" autoComplete="off" />
@@ -94,7 +99,7 @@ export default function NewFamily() {
         )}
         {step === 1 && (
           <>
-            <h1 className="text-3xl font-extrabold sm:text-4xl">Set spending rules</h1>
+            <h1 className="font-display text-3xl font-semibold sm:text-4xl">Set spending rules</h1>
             <p className="mb-8 mt-2 text-ink-mute">You can change these any time. Defaults suit most families.</p>
             <div className="card p-5 sm:p-7"><RulesEditor rules={rules} onChange={setRules} /></div>
             <Button size="lg" full className="mt-8" onClick={() => setStep(2)}>Continue <ArrowRight className="h-5 w-5" /></Button>
@@ -102,11 +107,11 @@ export default function NewFamily() {
         )}
         {step === 2 && (
           <>
-            <h1 className="text-3xl font-extrabold sm:text-4xl">Review & create</h1>
+            <h1 className="font-display text-3xl font-semibold sm:text-4xl">Review & create</h1>
             <p className="mb-8 mt-2 text-ink-mute">Check everything looks right.</p>
             <div className="mx-auto mb-6 max-w-[340px]"><PassCard name={fullName || "Family member"} balance={0} last4="••••" hue="brand" compact /></div>
             <dl className="divide-y divide-line rounded-3xl border border-line bg-white text-sm shadow-card">
-              {[["Name", fullName], ["Relationship", relation], ["Email", email], ["Mobile", phone || "—"], ["City", city], ["Monthly limit", `$${rules.monthlyLimit}`], ["Per-payment cap", `$${rules.perTxLimit}`], ["Care types", rules.allowed.join(", ")]].map(([k, v]) => (
+              {[["Name", fullName], ["Relationship", relation], ["Email", email], ["Mobile", phone || "—"], ["City", city], ["Monthly limit", `$${rules.monthlyLimit}`], ["Most per payment", `$${rules.perTxLimit}`], ["Care types", rules.allowed.join(", ")]].map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-6 px-5 py-3.5"><dt className="text-ink-mute">{k}</dt><dd className="text-right font-semibold capitalize">{v}</dd></div>
               ))}
             </dl>

@@ -8,25 +8,32 @@
     "start": "next start",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "npx tsx scripts/migrate.mts"
+    "db:migrate": "npx tsx scripts/migrate.mts",
+    "chain:test": "npx tsx scripts/chain-selftest.mts",
+    "moonpay:check": "npx tsx scripts/moonpay-check.mts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.16",
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/figtree": "^5.3.0",
+    "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@neondatabase/serverless": "^1.2.1",
     "@stellar/stellar-sdk": "^17.4.0",
+    "@stellar/typescript-wallet-sdk": "^6.0.0",
     "better-auth": "^1.7.23",
     "clsx": "2.1.1",
     "drizzle-orm": "^0.45.4",
     "lucide-react": "0.468.0",
     "next": "^15.5.29",
+    "qrcode": "^1.5.4",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "19.0.2",
     "@types/react-dom": "19.0.2",
     "autoprefixer": "10.4.20",

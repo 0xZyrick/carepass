@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { authed, body, err, money } from "@/server/http";
+import { syncRules } from "@/server/chain";
 import { CAT_IDS, db, getOwnedPass, schema, toBeneficiary } from "@/server/passes";
+
+export const maxDuration = 60;
 
 export const PATCH = authed<{ id: string }>(["sponsor"], async (req, me, { id }) => {
   const row = await getOwnedPass(me, id, "sponsor");
@@ -26,5 +29,6 @@ export const PATCH = authed<{ id: string }>(["sponsor"], async (req, me, { id })
   const monthly = set.monthlyLimitCents ?? row.monthlyLimitCents;
   if (perTx > monthly) return err("Per-payment cap can't be higher than the monthly limit.");
   const [saved] = await db.update(schema.pass).set(set).where(eq(schema.pass.id, id)).returning();
+  await syncRules(id);
   return NextResponse.json({ beneficiary: toBeneficiary(saved) });
 });

@@ -11,7 +11,7 @@ import { Tx, TxKind } from "@/lib/data";
 import { dayLabel, usd } from "@/lib/format";
 
 const FILTERS: { id: "all" | TxKind; label: string }[] = [
-  { id: "all", label: "All" }, { id: "topup", label: "Top-ups" }, { id: "payment", label: "Payments" }, { id: "blocked", label: "Blocked" },
+  { id: "all", label: "All" }, { id: "topup", label: "Added" }, { id: "payment", label: "Payments" }, { id: "blocked", label: "Not allowed" },
 ];
 
 export function ActivityView() {
@@ -39,10 +39,10 @@ export function ActivityView() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Activity" sub="Every top-up, clinic payment and blocked attempt — in one place." />
+      <PageHeader title="Activity" sub="Money added, clinic payments, and anything your rules stopped." />
 
       <div className="mb-5 grid grid-cols-3 gap-3">
-        {[["Funded", usd(sum("topup"), 0), "text-brand-700"], ["Spent on care", usd(sum("payment"), 0), "text-ink"], ["Blocked", usd(sum("blocked"), 0), "text-rose-700"]].map(([l, v, c]) => (
+        {[["Added", usd(sum("topup"), 0), "text-brand-700"], ["Spent on care", usd(sum("payment"), 0), "text-ink"], ["Not allowed", usd(sum("blocked"), 0), "text-rose-700"]].map(([l, v, c]) => (
           <div key={l} className="card p-3.5 sm:p-5"><div className="text-[11px] font-semibold text-ink-mute sm:text-xs">{l}</div><div className={clsx("num mt-1 text-xl font-extrabold sm:text-2xl", c)}>{v}</div></div>
         ))}
       </div>
@@ -50,7 +50,7 @@ export function ActivityView() {
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search merchant or reference" aria-label="Search activity"
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search clinic or reference" aria-label="Search activity"
             className="h-12 w-full rounded-2xl border border-line-strong bg-white pl-11 pr-4 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15" />
         </div>
         {beneficiaries.length > 1 && (

@@ -2,25 +2,32 @@
 
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from "react";
-import { Beneficiary, Category, TopupRequest, Tx } from "./data";
+import { Beneficiary, Category, MERCHANTS, Merchant, TopupRequest, Tx } from "./data";
 import type { Decision } from "./guardrail";
 import { ago, clock, daysSince } from "./format";
 
 interface Toast { id: number; msg: string; tone: "ok" | "warn" }
-export interface Me { id: string; name: string; email: string; role: "sponsor" | "family" | null }
+export interface Me { id: string; name: string; email: string; role: "sponsor" | "family" | "clinic" | null; hasPin?: boolean }
+export interface MyClinic { id: string; name: string; type: Category; city: "Lagos" | "Abuja"; area: string; bankName: string; accountLast4: string; verified: boolean }
+export interface ClinicPayment { chainTx?: string; id: string; amount: number; at: string; ref: string; note: string; patient: string; daysAgo: number; time: string }
+export type ClinicInput = { name: string; type: Category; city: "Lagos" | "Abuja"; area: string; bankName: string; accountLast4: string };
 
 type NewPass = {
   fullName: string; email: string; relation: string; phone: string; city: "Lagos" | "Abuja";
   monthlyLimit: number; perTxLimit: number; allowed: Category[];
 };
 export type PayResult = { decision: Decision; tx: Tx };
+export type PayOutcome = PayResult | { error: string; status: number };
 
 interface Store {
   me: Me | null;
   loading: boolean;
   previewEnabled: boolean;
-  fundingProvider: "moonpay" | "sandbox";
+  fundingProviders: ("anchor" | "moonpay")[];
   beneficiaries: Beneficiary[];
+  merchants: Merchant[];
+  myClinic: MyClinic | null;
+  clinicPayments: ClinicPayment[];
   txs: Tx[];
   requests: TopupRequest[];
   toasts: Toast[];
@@ -33,11 +40,13 @@ interface Store {
   spent: (id: string) => number;
   refresh: () => Promise<void>;
   topUp: (id: string, amount: number, method: string) => Promise<Tx | null>;
-  startFunding: (passId: string, amount: number) => Promise<{ id: string; url: string } | null>;
+  startFunding: (passId: string, amount: number, provider: "anchor" | "moonpay") => Promise<{ id: string; url: string } | null>;
   syncFunding: (id: string) => Promise<boolean>;
   addBeneficiary: (b: NewPass) => Promise<Beneficiary | null>;
   updateBeneficiary: (id: string, patch: Partial<Pick<Beneficiary, "frozen" | "monthlyLimit" | "perTxLimit" | "allowed">>) => Promise<boolean>;
-  pay: (id: string, dest: string, amount: number, note?: string) => Promise<PayResult | null>;
+  pay: (id: string, dest: string, amount: number, note?: string, pin?: string) => Promise<PayOutcome>;
+  createPin: (pin: string) => Promise<boolean>;
+  saveClinic: (c: ClinicInput, existing: boolean) => Promise<boolean>;
   requestTopUp: (id: string, amount: number, note: string) => Promise<boolean>;
   dismissRequest: (id: string) => Promise<void>;
   seedDemo: (reset?: boolean) => Promise<boolean>;
@@ -71,8 +80,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [previewEnabled, setPreview] = useState(false);
-  const [fundingProvider, setProvider] = useState<"moonpay" | "sandbox">("sandbox");
+  const [fundingProviders, setProviders] = useState<("anchor" | "moonpay")[]>([]);
   const [beneficiaries, setB] = useState<Beneficiary[]>([]);
+  const [clinics, setClinics] = useState<Merchant[]>([]);
+  const [myClinic, setMyClinic] = useState<MyClinic | null>(null);
+  const [clinicPayments, setClinicPayments] = useState<ClinicPayment[]>([]);
   const [txs, setTxs] = useState<Tx[]>([]);
   const [requests, setReq] = useState<TopupRequest[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -93,10 +105,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    const r = await call<{ me: Me; previewEnabled: boolean; fundingProvider: "moonpay" | "sandbox"; beneficiaries: Beneficiary[]; txs: Tx[]; requests: TopupRequest[] }>("/api/state", "GET");
+    const r = await call<{ me: Me; previewEnabled: boolean; fundingProviders: ("anchor" | "moonpay")[]; beneficiaries: Beneficiary[]; clinics: Merchant[]; myClinic: MyClinic | null; clinicPayments: (Omit<ClinicPayment, "daysAgo" | "time">)[]; txs: Tx[]; requests: TopupRequest[] }>("/api/state", "GET");
     if (r.ok) {
       const bs = r.json.beneficiaries.map(mapB);
-      setMe(r.json.me); setPreview(r.json.previewEnabled); setProvider(r.json.fundingProvider);
+      setMe(r.json.me); setPreview(r.json.previewEnabled); setProviders(r.json.fundingProviders ?? []);
+      setClinics(r.json.clinics ?? []); setMyClinic(r.json.myClinic ?? null);
+      setClinicPayments((r.json.clinicPayments ?? []).map((p) => ({ ...p, daysAgo: daysSince(p.at), time: clock(p.at) })));
       setB(bs); setTxs(r.json.txs.map(mapTx)); setReq(r.json.requests.map(mapReq));
       if (!wanted.current) { try { wanted.current = localStorage.getItem(PASS_KEY) ?? ""; } catch {} }
       setActive((cur) => {
@@ -104,7 +118,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return pick ?? bs[0]?.id ?? "";
       });
     } else if (r.status === 401) {
-      setMe(null); setB([]); setTxs([]); setReq([]);
+      setMe(null); setB([]); setTxs([]); setReq([]); setClinics([]); setMyClinic(null); setClinicPayments([]);
     }
     loaded.current = true;
     setLoading(false);
@@ -112,7 +126,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Only signed-in areas load account data, so public pages make no API calls (and no 401s).
   useEffect(() => {
-    if (/^\/(sponsor|pass)(\/|$)/.test(path ?? "")) { if (!loaded.current) { setLoading(true); void refresh(); } }
+    if (/^\/(sponsor|pass|clinic)(\/|$)/.test(path ?? "")) { if (!loaded.current) { setLoading(true); void refresh(); } }
     else if (!loaded.current) setLoading(false);
   }, [path, refresh]);
 
@@ -122,7 +136,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const month = txs.filter((t) => t.daysAgo < 30);
     const paid = month.filter((t) => t.kind === "payment");
     return {
-      me, loading, previewEnabled, fundingProvider, beneficiaries, txs, requests, toasts, activePassId, setActivePassId,
+      me, loading, previewEnabled, fundingProviders, beneficiaries, myClinic, clinicPayments,
+      merchants: previewEnabled ? [...MERCHANTS, ...clinics] : clinics,
+      txs, requests, toasts, activePassId, setActivePassId,
       totalCredit: beneficiaries.reduce((s, b) => s + b.balance, 0),
       settledThisMonth: paid.reduce((s, t) => s + t.amount, 0),
       settledCount: paid.length,
@@ -134,8 +150,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!r.ok) return fail(r.json.error);
         await refresh(); return mapTx(r.json.tx);
       },
-      startFunding: async (passId, amount) => {
-        const r = await call<{ id: string; url: string }>("/api/funding", "POST", { passId, amount });
+      startFunding: async (passId, amount, provider) => {
+        const r = await call<{ id: string; url: string }>("/api/funding", "POST", { passId, amount, provider });
         if (!r.ok) return fail(r.json.error);
         return { id: r.json.id, url: r.json.url };
       },
@@ -157,10 +173,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!r.ok) { setB(prev); fail(r.json.error); return false; }
         return true;
       },
-      pay: async (id, dest, amount, note) => {
-        const r = await call<PayResult>(`/api/passes/${id}/pay`, "POST", { dest, amount, note });
-        if (!r.ok) return fail(r.json.error);
+      pay: async (id, dest, amount, note, pin) => {
+        const r = await call<PayResult>(`/api/passes/${id}/pay`, "POST", { dest, amount, note, pin });
+        if (!r.ok) return { error: r.json.error ?? "Something went wrong. Please try again.", status: r.status };
         await refresh(); return { decision: r.json.decision, tx: mapTx(r.json.tx) };
+      },
+      createPin: async (pin) => {
+        const r = await call("/api/me/pin", "POST", { pin });
+        if (!r.ok) { fail(r.json.error); return false; }
+        await refresh(); return true;
+      },
+      saveClinic: async (c, existing) => {
+        const r = await call("/api/clinic", existing ? "PATCH" : "POST", c);
+        if (!r.ok) { fail(r.json.error); return false; }
+        await refresh(); return true;
       },
       requestTopUp: async (id, amount, note) => {
         const r = await call(`/api/passes/${id}/request`, "POST", { amount, note });
@@ -185,7 +211,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me, loading, previewEnabled, fundingProvider, beneficiaries, txs, requests, toasts, activePassId, toast, refresh, fail]);
+  }, [me, loading, previewEnabled, fundingProviders, beneficiaries, clinics, myClinic, clinicPayments, txs, requests, toasts, activePassId, toast, refresh, fail]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

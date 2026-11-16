@@ -8,7 +8,7 @@ type Ctx<P> = { params: Promise<P> };
 
 /** Wraps a route: requires a signed-in user with a role, and turns thrown errors into JSON 500s. */
 export function authed<P = Record<string, never>>(
-  roles: Array<"sponsor" | "family"> | "any",
+  roles: Array<"sponsor" | "family" | "clinic"> | "any",
   fn: (req: Request, me: Me, params: P) => Promise<Response>
 ) {
   return async (req: Request, ctx: Ctx<P>) => {

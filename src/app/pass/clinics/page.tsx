@@ -6,18 +6,18 @@ import { BadgeCheck, Lock, MapPin, Navigation, Search } from "lucide-react";
 import clsx from "clsx";
 import { CatIcon, Empty } from "@/components/ui/ui";
 import { useStore } from "@/lib/store";
-import { CATEGORIES, Category, MERCHANTS } from "@/lib/data";
+import { CATEGORIES, Category } from "@/lib/data";
 
 export default function Clinics() {
-  const { beneficiaries, activePassId } = useStore();
+  const { beneficiaries, activePassId, merchants } = useStore();
   const b = beneficiaries.find((x) => x.id === activePassId) ?? beneficiaries[0];
   const [cat, setCat] = useState<"all" | Category>("all");
   const [q, setQ] = useState("");
   const [openOnly, setOpenOnly] = useState(false);
 
   const list = useMemo(
-    () => MERCHANTS.filter((m) => m.city === b.city && (cat === "all" || m.type === cat) && (!openOnly || m.open) && (!q || (m.name + m.area).toLowerCase().includes(q.toLowerCase()))).sort((a, c) => a.distKm - c.distKm),
-    [b.city, cat, q, openOnly]
+    () => merchants.filter((m) => m.city === b.city && (cat === "all" || m.type === cat) && (!openOnly || m.open) && (!q || (m.name + m.area).toLowerCase().includes(q.toLowerCase()))).sort((a, c) => a.distKm - c.distKm),
+    [merchants, b.city, cat, q, openOnly]
   );
 
   return (
@@ -37,7 +37,7 @@ export default function Clinics() {
       <label className="mt-4 flex cursor-pointer items-center gap-2.5 text-sm font-semibold text-ink-soft"><input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} className="h-5 w-5 accent-brand-500" /> Open now</label>
 
       <div className="mt-5 space-y-3">
-        {list.length === 0 && <Empty icon={<Search className="h-6 w-6" />} title="No clinics found" sub="Try a different category or clear your search." />}
+        {list.length === 0 && <Empty icon={<Search className="h-6 w-6" />} title={merchants.length ? "No clinics found" : "No clinics have joined yet"} sub={merchants.length ? "Try a different category or clear your search." : "Verified clinics will appear here as they join CarePass."} />}
         {list.map((m) => {
           const ok = b.allowed.includes(m.type);
           return (

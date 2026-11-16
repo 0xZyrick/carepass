@@ -76,3 +76,40 @@ Sponsors fund a pass through a signed MoonPay checkout. The server builds and si
 4. MoonPay's minimum purchase is $20.
 
 In the sandbox MoonPay delivers a small amount of Stellar testnet XLM to the sponsor's testnet wallet; the pass is credited with the USD amount. Switching to production means swapping the keys and registering the production webhook.
+
+## v7: clinic app, real PIN, plain-language UI
+
+- **Three roles:** sponsor, family, clinic. Choose one at first sign-in.
+- **Clinic app (`/clinic`):** set up the clinic, get a QR code (`carepass:clinic:CL-XXXXXX`), see payments received.
+- **Paying:** scan the QR (Chromium browsers) or type the clinic code. Payments need a 4-digit PIN (created on first payment, locked 10 minutes after 5 wrong tries).
+- **Public pages:** `/about` (how it's built), `/try`, `/terms`, `/privacy`. Set your real contact address in `src/lib/site.ts` and have a lawyer review the legal pages.
+- **MoonPay checkout check:** while signed in as a sponsor, open `/api/funding/check`. It reports whether the keys load and have the right shape without printing them. Keys go in `.env.local` with no quotes or spaces, and the publishable and secret key must come from the same sandbox account. `FUNDING_MODE=sandbox` bypasses MoonPay for demos.
+
+## v8: payments run through the contracts
+
+With the CHAIN_* variables set, the app works like this:
+- Each family pass gets its own vault contract the first time it is created or funded.
+- Each clinic is registered as a verified provider (and set up to receive USDC) when it is created.
+- Funding a pass deposits the amount into its vault. Paying a registered clinic goes through the pass's contract, and the receipt link appears on the payment.
+- Changing a pass's rules or pausing it updates the contract too.
+- Without the CHAIN_* variables the app keeps its own books and everything else works the same.
+
+Setup, from the project root, after `deploy-testnet.sh`:
+1. `contracts/scripts/chain-env.sh` prints the five variables. Paste them into `.env.local`.
+2. `npm run chain:test` creates a throwaway vault and clinic and checks one allowed and three refused payments.
+3. `npm run db:migrate` if you use Neon (adds the chain columns).
+
+Notes: the first payment after a pass or clinic is created can take 10 to 20 seconds while setup finishes. The server holds each pass's signing key (sealed with BETTER_AUTH_SECRET); the sponsor can still change rules, pause, or withdraw through the contract. Delete the old `public/testnet.json`; the app no longer uses it.
+
+## MoonPay troubleshooting
+`npm run moonpay:check` (run on your own computer) tests both keys against MoonPay, checks the currency code, and prints two links: a plain one and a signed one. If the plain link fails, the key or currency code is wrong. If only the signed link fails, the secret key doesn't belong with the publishable key.
+While signed in as a sponsor you can also open `/api/funding/check` in the browser. It shows the same key checks plus the two links (`plainLink`, `signedLink`) to try, with no command line needed.
+
+## v9: Stellar anchor funding and real USDC
+
+Sponsors can fund a pass with **Stellar USDC**: the server signs in to the anchor (SEP-10), opens a hosted deposit (SEP-24) on `CHAIN_ANCHOR_DOMAIN` (default `testanchor.stellar.org`), and credits the pass with the amount that actually arrives, then moves it into the family vault. MoonPay stays as a second option, and the instant test top-up remains when no provider is configured.
+
+- Real USDC: set `CHAIN_USDC_ISSUER` (confirm it against the anchor's stellar.toml) and omit `CHAIN_ISSUER_SECRET`. Run `REAL_USDC=1 contracts/scripts/chain-env.sh`.
+- Run `npm run db:migrate` to apply migrations 0003 and 0004, and delete the old `public/testnet.json`.
+- Not yet tested live against the network from the build sandbox: run `npm run chain:test` first.
+- `ANCHOR_FUNDING=off` hides the option.

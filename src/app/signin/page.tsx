@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const me = await getMe();
-  if (me?.role) redirect(me.role === "sponsor" ? "/sponsor" : "/pass");
+  if (me?.role) redirect(me.role === "sponsor" ? "/sponsor" : me.role === "clinic" ? "/clinic" : "/pass");
   return (
     <Suspense>
       <SignInFlow />

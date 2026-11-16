@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { authed, body, err, money } from "@/server/http";
 import { CAT_IDS, HUES, db, schema, toBeneficiary, uid } from "@/server/passes";
 import { eq } from "drizzle-orm";
+import { after } from "next/server";
+import { chainOn, ensureVault } from "@/server/chain";
+
+export const maxDuration = 60;
 
 export const POST = authed(["sponsor"], async (req, me) => {
   const b = await body<Record<string, unknown>>(req);
@@ -27,5 +31,6 @@ export const POST = authed(["sponsor"], async (req, me) => {
     monthlyLimitCents: Math.round(monthly * 100), perTxLimitCents: Math.round(perTx * 100), allowed, frozen: false,
   };
   const [saved] = await db.insert(schema.pass).values(row).returning();
+  if (chainOn()) after(async () => { try { await ensureVault(saved.id); } catch (e) { console.error("[chain] vault setup failed:", e instanceof Error ? e.message : e); } });
   return NextResponse.json({ beneficiary: toBeneficiary(saved) }, { status: 201 });
 });

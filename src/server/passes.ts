@@ -4,6 +4,9 @@ import { db, schema } from "./db";
 import type { Me } from "./auth";
 import { CATEGORIES, Hue } from "@/lib/data";
 import { moonpayEnabled } from "./moonpay";
+import { anchorEnabled } from "./anchor";
+import { pinState } from "./pin";
+import { publicClinic, toMerchant } from "./clinics";
 
 const { pass, ledger, topupRequest } = schema;
 export type PassRow = typeof pass.$inferSelect;
@@ -46,6 +49,7 @@ export const toTx = (r: LedgerRow) => ({
   category: (r.category ?? undefined) as never,
   note: r.note ?? undefined,
   method: r.method ?? undefined,
+  chainTx: r.chainTx ?? undefined,
   ref: r.ref,
   at: r.createdAt.toISOString(),
 });
@@ -63,7 +67,7 @@ export async function passesFor(me: Me): Promise<PassRow[]> {
 }
 
 export async function loadState(me: Me) {
-  const rows = me.role ? await passesFor(me) : [];
+  const rows = me.role === "sponsor" || me.role === "family" ? await passesFor(me) : [];
   const ids = rows.map((r) => r.id);
   const [txs, reqs] = ids.length
     ? await Promise.all([
@@ -76,10 +80,27 @@ export async function loadState(me: Me) {
     ? await db.select({ id: schema.user.id, name: schema.user.name }).from(schema.user).where(inArray(schema.user.id, sponsorIds))
     : [];
   const sponsorName = new Map(sponsors.map((s) => [s.id, s.name.split(" ")[0] || "your sponsor"]));
+  const { hasPin } = await pinState(me.id);
+  const clinicRows = me.role === "clinic" ? [] : await db.select().from(schema.clinic).where(eq(schema.clinic.verified, true)).limit(200);
+  const myClinic = me.role === "clinic" ? (await db.select().from(schema.clinic).where(eq(schema.clinic.ownerId, me.id)))[0] ?? null : null;
+  const myClinicView = myClinic ? publicClinic(myClinic) : null;
+  let clinicPayments: unknown[] = [];
+  if (myClinic) {
+    const rowsP = await db.select({ l: ledger, fullName: pass.fullName }).from(ledger)
+      .innerJoin(pass, eq(pass.id, ledger.passId)).where(and(eq(ledger.clinicId, myClinic.id), eq(ledger.kind, "payment")))
+      .orderBy(desc(ledger.createdAt)).limit(200);
+    clinicPayments = rowsP.map(({ l, fullName }) => ({
+      id: l.id, amount: l.amountCents / 100, at: l.createdAt.toISOString(), ref: l.ref, note: l.note ?? "", chainTx: l.chainTx ?? undefined,
+      patient: fullName.split(" ")[0] + " " + (fullName.split(" ")[1]?.[0] ?? "") + ".",
+    }));
+  }
   return {
-    me,
+    me: { ...me, hasPin },
+    clinics: clinicRows.map(toMerchant),
+    myClinic: myClinicView,
+    clinicPayments,
     previewEnabled: SPONSOR_PREVIEW,
-    fundingProvider: moonpayEnabled() ? ("moonpay" as const) : ("sandbox" as const),
+    fundingProviders: [...(anchorEnabled() ? ["anchor" as const] : []), ...(moonpayEnabled() ? ["moonpay" as const] : [])],
     beneficiaries: rows.map((r) => ({ ...toBeneficiary(r), sponsorName: sponsorName.get(r.sponsorId) })),
     txs: txs.map(toTx),
     requests: reqs.map((r) => ({

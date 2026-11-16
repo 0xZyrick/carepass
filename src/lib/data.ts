@@ -78,6 +78,7 @@ export interface Tx {
   time: string;
   ref: string;
   method?: string;
+  chainTx?: string;
   at?: string;
 }
 

@@ -22,7 +22,7 @@
   h2,
   h3 {
     @apply font-display;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.02em;
   }
   ::selection {
     @apply bg-brand-200 text-brand-950;
@@ -72,8 +72,27 @@
     @apply rounded-3xl border border-line bg-white shadow-card;
   }
   .num {
-    @apply font-display tabular-nums;
-    letter-spacing: -0.03em;
+    @apply font-sans tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  /* Receipt: white paper with a scalloped bottom edge. Wrap in .receipt-wrap for the shadow. */
+  .receipt-wrap {
+    filter: drop-shadow(0 14px 18px rgba(20, 32, 27, 0.1)) drop-shadow(0 1px 1px rgba(20, 32, 27, 0.06));
+  }
+  .receipt {
+    --s: 7px;
+    background: #fff;
+    border-radius: 18px 18px 0 0;
+    -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - var(--s)) no-repeat, radial-gradient(circle at var(--s) 0, #0000 calc(var(--s) - 0.5px), #000 var(--s)) bottom / calc(2 * var(--s)) var(--s) repeat-x;
+    mask: linear-gradient(#000 0 0) top / 100% calc(100% - var(--s)) no-repeat, radial-gradient(circle at var(--s) 0, #0000 calc(var(--s) - 0.5px), #000 var(--s)) bottom / calc(2 * var(--s)) var(--s) repeat-x;
+    padding-bottom: calc(var(--s) + 6px);
+  }
+  .tear {
+    border-top: 2px dashed theme("colors.line.strong");
+  }
+  .stamp {
+    @apply inline-flex items-center gap-1.5 rounded-md border-2 px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em];
+    transform: rotate(-4deg);
   }
   .no-scrollbar {
     scrollbar-width: none;
@@ -100,3 +119,18 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Headlines use a softer serif; keep them at a refined weight regardless of utility classes. */
+h1, h2, h3 { font-weight: 600 !important; }
+
+/* Skeleton loading blocks */
+.skeleton {
+  position: relative; overflow: hidden; background: #E9E1CF; border-radius: 12px;
+}
+.skeleton::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }

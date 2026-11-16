@@ -9,5 +9,6 @@ export default async function Layout({ children }: { children: React.ReactNode }
   const me = await getMe();
   if (!me || !me.role) redirect("/signin");
   if (me.role === "family") redirect("/pass");
+  if (me.role === "clinic") redirect("/clinic");
   return <SponsorShell>{children}</SponsorShell>;
 }

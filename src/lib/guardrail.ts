@@ -38,7 +38,8 @@ export function evaluatePayment(
   b: Rules,
   dest: string,
   amount: number,
-  spent: number
+  spent: number,
+  resolve: (dest: string) => Merchant | undefined = findMerchant
 ): Decision {
   const checks: Check[] = [];
   let failed = false;
@@ -48,12 +49,12 @@ export function evaluatePayment(
     checks.push({ id, label, status: ok ? "pass" : "fail", detail: ok ? passMsg : failMsg });
   };
 
-  const valid = FULL.test(dest.trim()) || SHORT.test(dest.trim());
-  const m = findMerchant(dest);
+  const m = resolve(dest);
+  const valid = !!m || FULL.test(dest.trim()) || SHORT.test(dest.trim()) || /^(carepass:clinic:)?CL-[A-Z0-9]{6}$/i.test(dest.trim());
 
-  run("pass", "Pass is active", !b.frozen, "Pass is active and unlocked", "Pass is frozen by the sponsor");
-  run("format", "Destination is valid", valid, "Address format is valid", "That doesn't look like a Stellar address (starts with G)");
-  run("whitelist", "Verified merchant", !!m, `${m?.name} is on the on-chain whitelist`, "Destination is not a verified hospital, lab or pharmacy");
+  run("pass", "Pass is active", !b.frozen, "Pass is active", "This pass is paused by the sponsor");
+  run("format", "QR code is readable", valid, "QR code recognised", "We couldn't read that QR code");
+  run("whitelist", "Verified provider", !!m, `${m?.name} is a verified provider`, "This isn't a verified hospital, lab or pharmacy");
   const cat = m ? CATEGORIES.find((c) => c.id === m.type)?.plural : "";
   run("category", "Care type allowed", !!m && b.allowed.includes(m.type), `${cat} are allowed on this pass`, `${cat ?? "This"} isn't enabled on this pass`);
   run("cap", "Within payment cap", amount <= b.perTxLimit, `${usd(amount)} is under the ${usd(b.perTxLimit, 0)} per-payment cap`, `Exceeds the ${usd(b.perTxLimit, 0)} per-payment cap`);
@@ -66,17 +67,17 @@ export function evaluatePayment(
         approved: false,
         merchant: m,
         checks,
-        headline: bad.id === "whitelist" || bad.id === "format" ? "Blocked by guardrail" : "Payment declined",
+        headline: bad.id === "whitelist" || bad.id === "format" ? "Not allowed" : "Payment declined",
         reason:
           bad.id === "whitelist"
-            ? "Funds stay locked in the CarePass wallet — zero leakage."
+            ? "Your money was not spent."
             : bad.detail + ".",
       }
     : {
         approved: true,
         merchant: m,
         checks,
-        headline: "Approved & settled",
-        reason: "USDC settles on Stellar within seconds, then is paid out in Naira through Yellow Card.",
+        headline: "Paid",
+        reason: "The clinic has been paid.",
       };
 }

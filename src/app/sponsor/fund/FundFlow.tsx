@@ -3,48 +3,46 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Building, Check, CreditCard, ExternalLink, Loader2, Lock, ShieldCheck, Wallet, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CreditCard, ExternalLink, Loader2, Lock, ShieldCheck, X } from "lucide-react";
 import clsx from "clsx";
 import { Avatar, Button } from "@/components/ui/ui";
 import { PassCard } from "@/components/PassCard";
 import { useStore } from "@/lib/store";
 import { FX_RATE, fundingFee, ngn, usd } from "@/lib/format";
 
-const METHODS = [
-  { id: "Visa •••• 4242", title: "Visa •••• 4242", sub: "Instant · Debit card", icon: CreditCard },
-  { id: "Bank transfer", title: "Bank transfer", sub: "Faster Payments · Usually under 1 hour", icon: Building },
-  { id: "USDC wallet", title: "USDC wallet", sub: "Pay directly from your wallet", icon: Wallet },
-];
+const METHOD = "Card";
 const PRESETS = [25, 50, 100, 200, 300];
 const STEPS = ["Who", "Amount", "Review"];
 
 export function FundFlow() {
   const router = useRouter();
   const q = useSearchParams();
-  const { beneficiaries, topUp, setActivePassId, fundingProvider, startFunding, syncFunding, toast } = useStore();
-  const live = fundingProvider === "moonpay";
+  const { beneficiaries, topUp, setActivePassId, fundingProviders, startFunding, syncFunding, toast } = useStore();
+  const methods = [...fundingProviders, "test" as const];
+  const [method, setMethod] = useState<"anchor" | "moonpay" | "test">(methods[0]);
+  const live = method !== "test";
   const [waiting, setWaiting] = useState<{ id: string; url: string } | null>(null);
   const initial = beneficiaries.find((b) => b.id === q.get("to"));
   const [step, setStep] = useState(initial ? 1 : 0);
   const [toId, setToId] = useState(initial?.id ?? "");
   const [amountStr, setAmountStr] = useState(q.get("amount") ?? "100");
-  const [method, setMethod] = useState(METHODS[0].id);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ ref: string } | null>(null);
+  const finish = (ref: string) => { setDone({ ref }); setWaiting(null); };
 
   const to = beneficiaries.find((b) => b.id === toId);
   const amount = Math.max(0, parseFloat(amountStr) || 0);
-  const fee = fundingFee(amount);
+  const fee = method === "anchor" ? 0 : fundingFee(amount);
   const total = amount + fee;
-  const minAmt = live ? 20 : 10;
-  const amountErr = amount < minAmt ? `Minimum top-up is $${minAmt}` : amount > 1000 ? "Maximum top-up is $1,000" : "";
+  const minAmt = method === "moonpay" ? 20 : method === "anchor" ? 5 : 10;
+  const amountErr = amount < minAmt ? `Minimum is $${minAmt}` : amount > 1000 ? "Maximum is $1,000" : "";
 
   // MoonPay: open the hosted checkout, then watch for it to complete. The pass is credited by the server.
   async function startCheckout() {
     if (!to) return;
     setBusy(true);
     const win = window.open("", "_blank"); // opened first so the browser doesn't block it
-    const f = await startFunding(to.id, amount);
+    const f = await startFunding(to.id, amount, method as "anchor" | "moonpay");
     setBusy(false);
     if (!f) { win?.close(); return; }
     if (win) win.location.href = f.url;
@@ -54,7 +52,7 @@ export function FundFlow() {
   useEffect(() => {
     if (!waiting) return;
     let alive = true;
-    const tick = async () => { if (await syncFunding(waiting.id) && alive) { setDone({ ref: "MP-" + waiting.id.slice(0, 6).toUpperCase() }); setWaiting(null); } };
+    const tick = async () => { if (await syncFunding(waiting.id) && alive) { finish((method === "anchor" ? "SA-" : "MP-") + waiting.id.slice(0, 6).toUpperCase()); } };
     const t = setInterval(tick, 4000);
     return () => { alive = false; clearInterval(t); };
   }, [waiting, syncFunding]);
@@ -62,7 +60,7 @@ export function FundFlow() {
   async function pay() {
     if (!to) return;
     setBusy(true);
-    const [tx] = await Promise.all([topUp(to.id, amount, method), new Promise((r) => setTimeout(r, 900))]);
+    const [tx] = await Promise.all([topUp(to.id, amount, METHOD), new Promise((r) => setTimeout(r, 900))]);
     setBusy(false);
     if (tx) setDone({ ref: tx.ref });
   }
@@ -72,14 +70,20 @@ export function FundFlow() {
     return (
       <div className="mx-auto max-w-md animate-fade-up py-8 text-center">
         <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand-50 text-brand-700"><Loader2 className="h-8 w-8 animate-spin" /></span>
-        <h1 className="mt-6 text-3xl font-extrabold">Finish in the MoonPay window</h1>
-        <p className="mt-3 text-ink-mute">Complete the purchase there. This page updates on its own the moment MoonPay confirms, and {to.name}'s pass is credited.</p>
-        <div className="mt-6 rounded-2xl bg-sun-50 p-4 text-left text-[13px] font-medium text-sun-600">
-          Sandbox: use test card <span className="font-mono font-bold">4000 0200 0000 0000</span> (US) or <span className="font-mono font-bold">4242 4242 4242 4242</span> (UK), any future expiry and any 3-digit CVV. Nothing is charged.
-        </div>
+        <h1 className="mt-6 font-display text-3xl font-semibold">Finish your payment</h1>
+        <p className="mt-3 text-ink-mute">Complete the payment there. This page updates by itself as soon as it's confirmed, and {to.name}'s pass is topped up.</p>
+        {method === "anchor" ? (
+          <div className="mt-6 rounded-2xl bg-sun-50 p-4 text-left text-[13px] font-medium text-sun-600">
+            Follow the steps in the Stellar deposit window. The pass is credited with the amount that actually arrives. Test network: no real money moves.
+          </div>
+        ) : (
+          <div className="mt-6 rounded-2xl bg-sun-50 p-4 text-left text-[13px] font-medium text-sun-600">
+            Test mode: use card <span className="font-mono font-bold">4000 0200 0000 0000</span> (US) or <span className="font-mono font-bold">4242 4242 4242 4242</span> (UK), any future expiry and any 3-digit CVV. Nothing is charged.
+          </div>
+        )}
         <div className="mt-6 grid gap-3">
-          <Button size="lg" full variant="outline" icon={<ExternalLink className="h-4 w-4" />} onClick={() => window.open(waiting.url, "_blank")}>Reopen MoonPay</Button>
-          <Button size="lg" full variant="ghost" onClick={async () => { const ok = await syncFunding(waiting.id); if (ok) { setDone({ ref: "MP-" + waiting.id.slice(0, 6).toUpperCase() }); setWaiting(null); } else toast("Not confirmed yet. Give it a few seconds.", "warn"); }}>I've finished, check now</Button>
+          <Button size="lg" full variant="outline" icon={<ExternalLink className="h-4 w-4" />} onClick={() => window.open(waiting.url, "_blank")}>Reopen checkout</Button>
+          <Button size="lg" full variant="ghost" onClick={async () => { const ok = await syncFunding(waiting.id); if (ok) { finish((method === "anchor" ? "SA-" : "MP-") + waiting.id.slice(0, 6).toUpperCase()); } else toast("Not confirmed yet. Give it a few seconds.", "warn"); }}>I've finished, check now</Button>
           <button onClick={() => setWaiting(null)} className="text-sm font-semibold text-ink-mute hover:text-ink">Cancel</button>
         </div>
       </div>
@@ -98,16 +102,16 @@ export function FundFlow() {
             </svg>
           </span>
         </div>
-        <h1 className="mt-7 text-3xl font-extrabold">{usd(amount)} sent to {to.name}</h1>
-        <p className="mt-2 text-ink-mute">{to.name}'s care credit is available right now — {ngn(amount)} for hospitals, labs and pharmacies.</p>
+        <h1 className="mt-7 font-display text-3xl font-semibold">You sent {usd(amount)} to {to.name}</h1>
+        <p className="mt-2 text-ink-mute">{to.name}'s pass has {ngn(amount)} more to spend at verified hospitals, labs and pharmacies.</p>
         <div className="mx-auto mt-7 max-w-[320px]"><PassCard name={to.fullName} balance={to.balance} last4={to.last4} hue={to.hue} compact /></div>
         <dl className="mt-7 divide-y divide-line rounded-2xl border border-line bg-white text-left text-sm">
-          {[["Reference", done.ref], ["Paid with", live ? "MoonPay (sandbox)" : method], ["Total charged", usd(total)]].map(([k, v]) => (
+          {[["Reference", done.ref], ["Paid with", method === "anchor" ? "Stellar USDC" : "Card"], ["Total charged", usd(total)]].map(([k, v]) => (
             <div key={k} className="flex justify-between px-4 py-3"><dt className="text-ink-mute">{k}</dt><dd className="font-semibold">{v}</dd></div>
           ))}
         </dl>
         <div className="mt-7 grid gap-3">
-          <Button size="lg" full onClick={() => router.push("/sponsor")}>Back to overview</Button>
+          <Button size="lg" full onClick={() => router.push("/sponsor")}>Done</Button>
           <Button size="lg" full variant="outline" onClick={() => { setActivePassId(to.id); router.push("/pass"); }}>See it on {to.name}'s pass</Button>
         </div>
       </div>
@@ -140,8 +144,8 @@ export function FundFlow() {
         <div className="animate-fade-in" key={step}>
           {step === 0 && (
             <>
-              <h1 className="text-3xl font-extrabold sm:text-4xl">Who are you funding?</h1>
-              <p className="mt-2 text-ink-mute">Choose the family member who needs care credit.</p>
+              <h1 className="font-display text-3xl font-semibold sm:text-4xl">Who is it for?</h1>
+              <p className="mt-2 text-ink-mute">Choose the family member you're supporting.</p>
               <div className="mt-7 space-y-3" role="radiogroup" aria-label="Beneficiary">
                 {beneficiaries.map((b) => (
                   <button key={b.id} role="radio" aria-checked={toId === b.id} onClick={() => setToId(b.id)}
@@ -163,7 +167,7 @@ export function FundFlow() {
 
           {step === 1 && to && (
             <>
-              <h1 className="text-3xl font-extrabold sm:text-4xl">How much for {to.name}?</h1>
+              <h1 className="font-display text-3xl font-semibold sm:text-4xl">How much for {to.name}?</h1>
               <p className="mt-2 text-ink-mute">You'll see the exact fee and Naira value before paying.</p>
               <div className="card mt-7 p-6 text-center sm:p-8">
                 <label className="eyebrow" htmlFor="amt">Amount (USD)</label>
@@ -180,34 +184,34 @@ export function FundFlow() {
                   ))}
                 </div>
               </div>
-              <p className="mt-4 flex items-center gap-2 text-sm text-ink-mute"><ShieldCheck className="h-4 w-4 text-brand-600" /> Only spendable at verified {to.allowed.join(", ")} merchants.</p>
+              <p className="mt-4 flex items-center gap-2 text-sm text-ink-mute"><ShieldCheck className="h-4 w-4 text-brand-600" /> Can only be spent at verified providers ({to.allowed.join(", ")}).</p>
             </>
           )}
 
           {step === 2 && to && (
             <>
-              <h1 className="text-3xl font-extrabold sm:text-4xl">Review & pay</h1>
-              <p className="mt-2 text-ink-mute">{live ? "You'll pay securely with MoonPay." : "Choose how you'd like to pay."}</p>
-              {live ? (
-                <div className="mt-7 flex items-center gap-4 rounded-2xl border-2 border-brand-500 bg-white p-4 ring-4 ring-brand-500/10">
-                  <span className="grid h-11 w-11 place-items-center rounded-xl bg-canvas text-ink-soft"><CreditCard className="h-5 w-5" /></span>
-                  <div className="flex-1"><div className="font-bold">Card or bank via MoonPay</div><div className="text-sm text-ink-mute">Licensed checkout · opens in a new window</div></div>
-                  <Check className="h-5 w-5 text-brand-600" strokeWidth={3} />
-                </div>
-              ) : (
+              <h1 className="font-display text-3xl font-semibold sm:text-4xl">Review & pay</h1>
+              <p className="mt-2 text-ink-mute">Choose how you want to pay.</p>
               <div className="mt-7 space-y-3" role="radiogroup" aria-label="Payment method">
-                {METHODS.map((m) => (
-                  <button key={m.id} role="radio" aria-checked={method === m.id} onClick={() => setMethod(m.id)}
-                    className={clsx("flex w-full items-center gap-4 rounded-2xl border-2 bg-white p-4 text-left transition", method === m.id ? "border-brand-500 ring-4 ring-brand-500/10" : "border-line hover:border-line-strong")}>
-                    <span className="grid h-11 w-11 place-items-center rounded-xl bg-canvas text-ink-soft"><m.icon className="h-5 w-5" /></span>
-                    <div className="flex-1"><div className="font-bold">{m.title}</div><div className="text-sm text-ink-mute">{m.sub}</div></div>
-                    <span className={clsx("grid h-6 w-6 place-items-center rounded-full border-2", method === m.id ? "border-brand-500 bg-brand-500 text-white" : "border-line-strong")}>{method === m.id && <Check className="h-3.5 w-3.5" strokeWidth={3.5} />}</span>
-                  </button>
-                ))}
+                {methods.map((m) => {
+                  const info = m === "anchor"
+                    ? { t: "Stellar USDC", d: "No service fee. Secure deposit window opens", Icon: ShieldCheck }
+                    : m === "moonpay"
+                    ? { t: "Card or bank", d: "Secure checkout opens in a new window", Icon: CreditCard }
+                    : { t: "Card or bank", d: "Instant", Icon: CreditCard };
+                  const on = method === m;
+                  return (
+                    <button key={m} role="radio" aria-checked={on} onClick={() => setMethod(m)}
+                      className={clsx("flex w-full items-center gap-4 rounded-2xl border-2 bg-white p-4 text-left transition", on ? "border-brand-500 ring-4 ring-brand-500/10" : "border-line hover:border-line-strong")}>
+                      <span className="grid h-11 w-11 place-items-center rounded-xl bg-canvas text-ink-soft"><info.Icon className="h-5 w-5" /></span>
+                      <div className="flex-1"><div className="font-bold">{info.t}</div><div className="text-sm text-ink-mute">{info.d}</div></div>
+                      {on && <Check className="h-5 w-5 text-brand-600" strokeWidth={3} />}
+                    </button>
+                  );
+                })}
               </div>
-              )}
-              <p className="mt-5 flex items-center gap-2 text-sm text-ink-mute"><Lock className="h-4 w-4" /> Encrypted. Funds go to {to.name}'s merchant-locked wallet, never to cash.</p>
-              <p className="mt-2 flex items-center gap-2 rounded-xl bg-sun-50 px-3.5 py-2.5 text-[13px] font-medium text-sun-600">{live ? "MoonPay sandbox: test cards only, no real money moves." : "Sandbox funding: no real card is charged and no real money moves."}</p>
+              <p className="mt-5 flex items-center gap-2 text-sm text-ink-mute"><Lock className="h-4 w-4" /> Encrypted. The money goes into {to.name}'s pass and can only be spent on care.</p>
+              <p className="mt-2 rounded-xl bg-sun-50 px-3.5 py-2.5 text-[13px] font-medium text-sun-600">Test mode: no real money moves.</p>
             </>
           )}
         </div>
@@ -221,14 +225,14 @@ export function FundFlow() {
                 <Avatar initials={to.initials} hue={to.hue} size={44} />
                 <div className="leading-tight"><div className="font-bold">{to.fullName}</div><div className="text-sm text-ink-mute">{to.city} · •••• {to.last4}</div></div>
               </div>
-            ) : <p className="mt-4 text-sm text-ink-mute">Select who you're funding to continue.</p>}
+            ) : <p className="mt-4 text-sm text-ink-mute">Choose who you're sending to.</p>}
             {to && step >= 1 && (
               <dl className="mt-5 space-y-3 border-t border-line pt-5 text-sm">
-                <div className="flex justify-between"><dt className="text-ink-mute">Care credit</dt><dd className="num font-semibold">{usd(amount)}</dd></div>
-                <div className="flex justify-between"><dt className="text-ink-mute">Funding fee ({amount > 0 ? "1%" : "—"})</dt><dd className="num font-semibold">{usd(fee)}</dd></div>
-                <div className="flex justify-between"><dt className="text-ink-mute">Exchange rate</dt><dd className="font-semibold">$1 = ₦{FX_RATE.toLocaleString()}</dd></div>
+                <div className="flex justify-between"><dt className="text-ink-mute">Added to pass</dt><dd className="num font-semibold">{usd(amount)}</dd></div>
+                <div className="flex justify-between"><dt className="text-ink-mute">Service fee ({amount > 0 ? "1%" : "—"})</dt><dd className="num font-semibold">{usd(fee)}</dd></div>
+                <div className="flex justify-between"><dt className="text-ink-mute">Rate</dt><dd className="font-semibold">$1 = ₦{FX_RATE.toLocaleString()}</dd></div>
                 <div className="flex justify-between border-t border-line pt-4 text-base"><dt className="font-bold">You pay</dt><dd className="num font-extrabold">{usd(total)}</dd></div>
-                <div className="flex justify-between rounded-xl bg-brand-50 px-3.5 py-3 text-brand-800"><dt className="font-semibold">{to.name} receives</dt><dd className="font-bold">{ngn(amount)}</dd></div>
+                <div className="flex justify-between rounded-xl bg-brand-50 px-3.5 py-3 text-brand-800"><dt className="font-semibold">{to.name} can spend</dt><dd className="font-bold">{ngn(amount)}</dd></div>
               </dl>
             )}
           </div>

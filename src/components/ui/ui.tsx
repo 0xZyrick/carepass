@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { Category, Hue } from "@/lib/data";
+import { ngn, usd } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
 /* ---------- Brand ---------- */
@@ -20,7 +21,7 @@ export function Logo({ light = false, className }: { light?: boolean; className?
           <path d="M12 11.5v4M10 13.5h4" stroke="#CFF0E0" />
         </svg>
       </span>
-      <span className={clsx("font-display text-[19px] font-extrabold tracking-tight", light ? "text-white" : "text-ink")}>
+      <span className={clsx("font-display text-[21px] font-semibold tracking-tight", light ? "text-white" : "text-ink")}>
         CarePass
       </span>
     </span>
@@ -262,5 +263,26 @@ export function QRPattern({ seed, size = 200, fg = "#10231C" }: { seed: string; 
       {cells.map(([x, y]) => <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" rx=".2" fill={fg} />)}
       {finder(0, 0)}{finder(N - 7, 0)}{finder(0, N - 7)}
     </svg>
+  );
+}
+
+/* ---------- Money: dollars and Naira, side by side ---------- */
+const MONEY = { sm: ["text-[15px]", "text-xs"], md: ["text-2xl", "text-sm"], lg: ["text-[40px] leading-none", "text-base"], xl: ["text-[52px] leading-none", "text-lg"] } as const;
+export function Money({ amount, size = "md", sign = "", className, digits = 2, hide }: { amount: number; size?: keyof typeof MONEY; sign?: string; className?: string; digits?: number; hide?: boolean }) {
+  const [a, b] = MONEY[size];
+  return (
+    <span className={clsx("inline-flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5", className)}>
+      <span className={clsx("num font-bold", a)}>{hide ? "$•••••" : sign + usd(amount, digits)}</span>
+      <span className={clsx("num font-medium opacity-60", b)}>{hide ? "₦••••••" : ngn(amount)}</span>
+    </span>
+  );
+}
+
+/* ---------- Stamp: a small inked label, like a clinic receipt ---------- */
+export function Stamp({ tone = "ok", children, className }: { tone?: "ok" | "no" | "wait"; children: ReactNode; className?: string }) {
+  return (
+    <span className={clsx("stamp", tone === "ok" && "border-brand-600/70 text-brand-700", tone === "no" && "border-rose-500/70 text-rose-700", tone === "wait" && "border-sun-600/60 text-sun-600", className)}>
+      {children}
+    </span>
   );
 }

@@ -12,7 +12,7 @@ export default function FamilyPage() {
   const { beneficiaries, spent } = useStore();
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Family" sub="Each person has their own merchant-locked pass, limits and activity."
+      <PageHeader title="Family" sub="Each person has their own family pass, spending rules, limits and activity."
         action={<Button href="/sponsor/family/new" icon={<Plus className="h-4 w-4" />}>Add family member</Button>} />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         {beneficiaries.map((b) => {

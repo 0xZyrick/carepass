@@ -10,6 +10,9 @@ export const user = pgTable("user", {
   image: text("image"),
   /** "sponsor" | "family" — set once, right after first sign-in. */
   role: text("role"),
+  pinHash: text("pin_hash"),
+  pinFails: integer("pin_fails").notNull().default(0),
+  pinLockedUntil: timestamp("pin_locked_until"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -85,6 +88,10 @@ export const pass = pgTable(
     allowed: jsonb("allowed").$type<string[]>().notNull(),
     frozen: boolean("frozen").notNull().default(false),
     lastActiveAt: timestamp("last_active_at"),
+    /** On-chain vault for this pass (Stellar testnet today). The beneficiary key is sealed; see server/seal.ts. */
+    chainVaultId: text("chain_vault_id"),
+    chainBeneficiary: text("chain_beneficiary"),
+    chainBeneficiaryEnc: text("chain_beneficiary_enc"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [index("pass_sponsor_idx").on(t.sponsorId), index("pass_family_email_idx").on(t.familyEmail)]
@@ -98,9 +105,11 @@ export const ledger = pgTable(
     kind: text("kind").notNull(), // topup | payment | blocked
     amountCents: integer("amount_cents").notNull(),
     merchantLabel: text("merchant_label"),
+    clinicId: text("clinic_id"),
     category: text("category"),
     note: text("note"),
     method: text("method"),
+    chainTx: text("chain_tx"),
     ref: text("ref").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
@@ -118,6 +127,22 @@ export const topupRequest = pgTable(
   },
   (t) => [index("request_pass_idx").on(t.passId)]
 );
+
+/** A care provider that accepts CarePass. `id` is the short code printed in its QR (e.g. CL-7K2M9Q). */
+export const clinic = pgTable("clinic", {
+  id: text("id").primaryKey(),
+  ownerId: text("owner_id").notNull().unique().references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  type: text("type").notNull(), // hospital | lab | pharmacy | dental | optical
+  city: text("city").notNull(),
+  area: text("area").notNull().default(""),
+  bankName: text("bank_name").notNull().default(""),
+  accountLast4: text("account_last4").notNull().default(""),
+  verified: boolean("verified").notNull().default(false),
+  chainAddress: text("chain_address"),
+  chainSecretEnc: text("chain_secret_enc"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
 
 /** Demo-only: holds the latest sign-in code when no email provider is configured. */
 export const demoOtp = pgTable("demo_otp", {
@@ -147,6 +172,9 @@ export const funding = pgTable(
     walletAddress: text("wallet_address").notNull(),
     status: text("status").notNull().default("created"), // created | pending | completed | failed
     moonpayId: text("moonpay_id"),
+    /** moonpay | anchor (a Stellar anchor deposit, SEP-24) */
+    provider: text("provider").notNull().default("moonpay"),
+    anchorTxId: text("anchor_tx_id"),
     creditedAt: timestamp("credited_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },

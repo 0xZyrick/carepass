@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, X } from "lucide-react";
 import clsx from "clsx";
 import { Avatar, Button, Stamp } from "@/components/ui/ui";
-import { MERCHANTS, PERSONAL_SHORT, SEED_BENEFICIARIES, SEED_TXS } from "@/lib/data";
+import { MERCHANTS, PERSONAL_SHORT, SEED_BENEFICIARIES } from "@/lib/data";
 import { Decision, evaluatePayment } from "@/lib/guardrail";
 import { ngn, usd } from "@/lib/format";
 
@@ -19,7 +19,6 @@ const AMOUNTS = [50, 120, 400];
 /** A public, account-free walk-through using a fixed sample pass. Real payments are checked on the server. */
 export function TryPayment() {
   const b = SEED_BENEFICIARIES[0];
-  const spent = SEED_TXS.filter((t) => t.kind === "payment" && t.beneficiaryId === b.id && t.daysAgo < 30).reduce((s, t) => s + t.amount, 0);
   const [dest, setDest] = useState(WHERE[3].value);
   const [amount, setAmount] = useState(50);
   const [d, setD] = useState<Decision | null>(null);
@@ -33,7 +32,7 @@ export function TryPayment() {
 
       <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="card p-5 sm:p-7">
-          <div className="flex items-center gap-3"><Avatar initials={b.initials} hue={b.hue} size={44} /><div className="leading-tight"><div className="font-bold">{b.fullName}'s pass</div><div className="text-sm text-ink-mute">{usd(b.perTxLimit, 0)} per payment · {usd(b.monthlyLimit, 0)} per month</div></div></div>
+          <div className="flex items-center gap-3"><Avatar initials={b.initials} hue={b.hue} size={44} /><div className="leading-tight"><div className="font-bold">{b.fullName}'s pass</div><div className="text-sm text-ink-mute">{b.allowed.join(", ")} allowed</div></div></div>
           <div className="eyebrow mb-2.5 mt-7">Pay</div>
           <div className="flex flex-wrap gap-2">
             {WHERE.map((w) => <button key={w.value} onClick={() => { setDest(w.value); setD(null); }} className={clsx("h-10 rounded-full border px-4 text-sm font-semibold", dest === w.value ? "border-ink bg-ink text-white" : "border-line-strong bg-white")}>{w.label}</button>)}
@@ -42,13 +41,13 @@ export function TryPayment() {
           <div className="flex flex-wrap gap-2">
             {AMOUNTS.map((a) => <button key={a} onClick={() => { setAmount(a); setD(null); }} className={clsx("h-10 rounded-full border px-5 text-sm font-bold", amount === a ? "border-ink bg-ink text-white" : "border-line-strong bg-white")}>${a}</button>)}
           </div>
-          <Button size="lg" full className="mt-8" onClick={() => setD(evaluatePayment(b, dest, amount, spent))}>Pay {usd(amount, 0)} to {place.label}</Button>
+          <Button size="lg" full className="mt-8" onClick={() => setD(evaluatePayment(b, dest, amount))}>Pay {usd(amount, 0)} to {place.label}</Button>
         </div>
 
         <div aria-live="polite">
           {d ? (
             <div className="receipt-wrap animate-scale-in"><div className="receipt px-6 pb-9 pt-8 text-center">
-              <Stamp tone={d.approved ? "ok" : "no"} className="!text-sm">{d.approved ? "Paid" : "Not allowed"}</Stamp>
+              <Stamp slant tone={d.approved ? "ok" : "no"} className="!text-sm">{d.approved ? "Paid" : "Not allowed"}</Stamp>
               <div className="num mt-5 font-display text-5xl font-semibold">{usd(amount)}</div>
               <div className="mt-1 text-ink-mute">about {ngn(amount)}</div>
               <p className="mx-auto mt-4 max-w-xs leading-relaxed text-ink-soft">{d.approved ? `${d.merchant?.name} has been paid.` : d.reason}</p>

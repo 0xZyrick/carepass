@@ -109,12 +109,6 @@
               "function_name": "set_rules",
               "args": [
                 {
-                  "i128": "4000000000"
-                },
-                {
-                  "i128": "1000000000"
-                },
-                {
                   "u32": 9
                 }
               ]
@@ -124,7 +118,6 @@
         }
       ]
     ],
-    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
@@ -147,7 +140,6 @@
         }
       ]
     ],
-    [],
     []
   ],
   "ledger": {
@@ -230,7 +222,7 @@
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
               "key": {
                 "ledger_key_nonce": {
-                  "nonce": "8370022561469687789"
+                  "nonce": "4270020994084947596"
                 }
               },
               "durability": "temporary",
@@ -502,22 +494,6 @@
                             "val": {
                               "u32": 9
                             }
-                          },
-                          {
-                            "key": {
-                              "symbol": "monthly_limit"
-                            },
-                            "val": {
-                              "i128": "4000000000"
-                            }
-                          },
-                          {
-                            "key": {
-                              "symbol": "per_tx_limit"
-                            },
-                            "val": {
-                              "i128": "1000000000"
-                            }
                           }
                         ]
                       }
@@ -542,18 +518,10 @@
                           },
                           {
                             "key": {
-                              "symbol": "spent"
+                              "symbol": "reserved"
                             },
                             "val": {
-                              "i128": "800000000"
-                            }
-                          },
-                          {
-                            "key": {
-                              "symbol": "window_start"
-                            },
-                            "val": {
-                              "u64": "0"
+                              "i128": "0"
                             }
                           }
                         ]

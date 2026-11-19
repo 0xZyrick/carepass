@@ -7,9 +7,9 @@ import { StoreProvider } from "@/lib/store";
 import { ToastHost } from "@/components/ui/ui";
 
 export const metadata: Metadata = {
-  title: { default: "CarePass: Send care, not cash", template: "%s | CarePass" },
+  title: { default: "CarePass: Care for family back home", template: "%s | CarePass" },
   description:
-    "CarePass lets you fund a relative's medical care abroad with rules you control. The money can only be spent at verified hospitals, labs and pharmacies, and every payment is visible to you.",
+    "Plan and pay for a relative's treatment in Nigeria. Choose a care plan and a verified clinic, follow each step, and money is released only when the clinic confirms the visit.",
 };
 
 export const viewport: Viewport = {

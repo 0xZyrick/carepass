@@ -5,7 +5,7 @@ import { db, schema } from "./db";
 import { seal, unseal } from "./seal";
 import { sponsorKeypair } from "./wallet";
 import {
-  ChainConfig, ChainError, CONTRACT_REASON, chainConfig, deployVault, ensureTrustline, fundAccount, fundVault, payFromVault, registerClinic,
+  ChainConfig, ChainError, CONTRACT_REASON, cancelPlan, chainConfig, confirmStep, deployVault, lacksEscrow, openPlan, ensureTrustline, fundAccount, fundVault, payFromVault, registerClinic,
   setVaultFrozen, setVaultRules, vaultCents,
 } from "./chain-core";
 
@@ -50,7 +50,7 @@ export function ensureVault(passId: string): Promise<string> {
     if (p.chainVaultId) return p.chainVaultId;
     const vaultId = await deployVault(cfg, {
       sponsor: sponsor.publicKey(), beneficiary: beneficiary.publicKey(),
-      monthlyCents: p.monthlyLimitCents, perTxCents: p.perTxLimitCents, allowed: p.allowed as string[],
+      allowed: p.allowed as string[],
     });
     await db.update(schema.pass).set({ chainVaultId: vaultId }).where(eq(schema.pass.id, passId));
     if (p.frozen) await setVaultFrozen(cfg, vaultId, sponsor, true).catch(() => {});
@@ -105,11 +105,11 @@ export async function prepareClinicPayment(passId: string, clinic: ClinicRow) {
 }
 
 /** Sends the payment through the pass's contract. The contract decides; a refusal comes back as ChainError.code. */
-export async function payOnChain(passId: string, clinicAddress: string, cents: number): Promise<string> {
+export async function payOnChain(passId: string, clinicAddress: string, cents: number, receiptHash?: string): Promise<string> {
   const cfg = cfgOrThrow();
   const p = (await passRow(passId))!;
   if (!p.chainVaultId || !p.chainBeneficiaryEnc) throw new ChainError("This pass has no vault yet.");
-  const { hash } = await payFromVault(cfg, p.chainVaultId, Keypair.fromSecret(unseal(p.chainBeneficiaryEnc)), clinicAddress, cents);
+  const { hash } = await payFromVault(cfg, p.chainVaultId, Keypair.fromSecret(unseal(p.chainBeneficiaryEnc)), clinicAddress, cents, receiptHash);
   return hash;
 }
 
@@ -121,7 +121,7 @@ export async function syncRules(passId: string) {
     const p = await passRow(passId);
     if (!p?.chainVaultId) return;
     const sponsor = await sponsorKeypair(p.sponsorId);
-    await setVaultRules(cfg, p.chainVaultId, sponsor, { monthlyCents: p.monthlyLimitCents, perTxCents: p.perTxLimitCents, allowed: p.allowed as string[] });
+    await setVaultRules(cfg, p.chainVaultId, sponsor, { allowed: p.allowed as string[] });
     await setVaultFrozen(cfg, p.chainVaultId, sponsor, p.frozen);
   } catch (e) {
     console.error("[chain] rules sync failed:", e instanceof Error ? e.message : e);
@@ -135,4 +135,49 @@ export async function prepareSponsorAccount(sponsorId: string): Promise<Keypair>
   await fundAccount(cfg, sponsor.publicKey());
   await ensureTrustline(cfg, sponsor);
   return sponsor;
+}
+
+/** The clinic's own signing key, sealed in the database. */
+export async function clinicKeypair(clinicId: string): Promise<Keypair> {
+  await ensureClinic(clinicId);
+  const [c] = await db.select().from(schema.clinic).where(eq(schema.clinic.id, clinicId));
+  if (!c?.chainSecretEnc) throw new ChainError("This clinic has no account on the network yet.");
+  return Keypair.fromSecret(unseal(c.chainSecretEnc));
+}
+
+// ------------------------------------------------------------------ care-plan escrow
+
+/** Care-plan escrow on the network: on unless turned off. Vaults deployed before escrow existed fall back to plain plans. */
+export const escrowOn = () => chainOn() && process.env.CHAIN_ESCROW !== "off";
+
+/** Opens the plan on the pass's vault, which locks the money for every step. Returns the plan's number, or null if this vault predates escrow. */
+export async function openPlanOnChain(passId: string, steps: { clinicId: string; cents: number }[]): Promise<number | null> {
+  const cfg = cfgOrThrow();
+  await reconcileVault(passId); // the vault must hold what the pass shows before it can lock it
+  const p = (await passRow(passId))!;
+  const addrs = new Map<string, string>();
+  for (const id of new Set(steps.map((s) => s.clinicId))) addrs.set(id, await ensureClinic(id));
+  const sponsor = await sponsorKeypair(p.sponsorId);
+  try {
+    return (await openPlan(cfg, p.chainVaultId!, sponsor, steps.map((s) => ({ merchant: addrs.get(s.clinicId)!, cents: s.cents })))).planId;
+  } catch (e) {
+    if (lacksEscrow(e)) return null;
+    throw e;
+  }
+}
+
+/** Releases one step: the clinic and the patient both sign on the network. Returns the receipt hash of the transaction. */
+export async function confirmStepOnChain(passId: string, clinicId: string, chainPlanId: number, index: number, receiptHash: string): Promise<string> {
+  const cfg = cfgOrThrow();
+  const p = (await passRow(passId))!;
+  if (!p.chainVaultId || !p.chainBeneficiaryEnc) throw new ChainError("This pass has no vault yet.");
+  const { hash } = await confirmStep(cfg, p.chainVaultId, chainPlanId, index, Keypair.fromSecret(unseal(p.chainBeneficiaryEnc)), await clinicKeypair(clinicId), receiptHash);
+  return hash;
+}
+
+export async function cancelPlanOnChain(passId: string, chainPlanId: number) {
+  const cfg = cfgOrThrow();
+  const p = (await passRow(passId))!;
+  if (!p.chainVaultId) return;
+  await cancelPlan(cfg, p.chainVaultId, await sponsorKeypair(p.sponsorId), chainPlanId);
 }

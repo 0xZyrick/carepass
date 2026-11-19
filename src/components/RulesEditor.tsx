@@ -3,10 +3,9 @@
 import clsx from "clsx";
 import { Check } from "lucide-react";
 import { CATEGORIES, Category } from "@/lib/data";
-import { CatIcon, Range } from "@/components/ui/ui";
-import { ngn, usd } from "@/lib/format";
+import { CatIcon } from "@/components/ui/ui";
 
-export interface Rules { monthlyLimit: number; perTxLimit: number; allowed: Category[] }
+export interface Rules { allowed: Category[] }
 
 export function RulesEditor({ rules, onChange }: { rules: Rules; onChange: (r: Rules) => void }) {
   const toggle = (c: Category) => {
@@ -17,21 +16,8 @@ export function RulesEditor({ rules, onChange }: { rules: Rules; onChange: (r: R
   return (
     <div className="space-y-7">
       <div>
-        <div className="flex items-end justify-between">
-          <label className="text-sm font-bold">Monthly limit</label>
-          <div className="text-right"><span className="num text-2xl font-extrabold">{usd(rules.monthlyLimit, 0)}</span><span className="ml-2 text-xs text-ink-mute">{ngn(rules.monthlyLimit)}</span></div>
-        </div>
-        <div className="mt-3"><Range label="Monthly limit" min={50} max={1000} step={25} value={rules.monthlyLimit} onChange={(v) => onChange({ ...rules, monthlyLimit: v, perTxLimit: Math.min(rules.perTxLimit, v) })} /></div>
-      </div>
-      <div>
-        <div className="flex items-end justify-between">
-          <label className="text-sm font-bold">Per-payment cap</label>
-          <div className="text-right"><span className="num text-2xl font-extrabold">{usd(rules.perTxLimit, 0)}</span><span className="ml-2 text-xs text-ink-mute">{ngn(rules.perTxLimit)}</span></div>
-        </div>
-        <div className="mt-3"><Range label="Per-payment cap" min={25} max={Math.max(50, rules.monthlyLimit)} step={25} value={Math.min(rules.perTxLimit, rules.monthlyLimit)} onChange={(v) => onChange({ ...rules, perTxLimit: v })} /></div>
-      </div>
-      <div>
         <div className="text-sm font-bold">Allowed care types</div>
+        <p className="mt-1 text-sm text-ink-mute">The money only goes to verified providers of these kinds of care. Each care plan sets its own steps and amounts.</p>
         <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           {CATEGORIES.map((c) => {
             const on = rules.allowed.includes(c.id);

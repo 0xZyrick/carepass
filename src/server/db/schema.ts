@@ -83,8 +83,8 @@ export const pass = pgTable(
     hue: text("hue").notNull(),
     last4: text("last4").notNull(),
     balanceCents: integer("balance_cents").notNull().default(0),
-    monthlyLimitCents: integer("monthly_limit_cents").notNull(),
-    perTxLimitCents: integer("per_tx_limit_cents").notNull(),
+    monthlyLimitCents: integer("monthly_limit_cents").notNull().default(0), // retired: the care plan is the limit
+    perTxLimitCents: integer("per_tx_limit_cents").notNull().default(0), // retired
     allowed: jsonb("allowed").$type<string[]>().notNull(),
     frozen: boolean("frozen").notNull().default(false),
     lastActiveAt: timestamp("last_active_at"),
@@ -110,6 +110,9 @@ export const ledger = pgTable(
     note: text("note"),
     method: text("method"),
     chainTx: text("chain_tx"),
+    /** sha256 of the receipt, attached to the network payment so the record can be checked later */
+    receiptHash: text("receipt_hash"),
+    receipt: jsonb("receipt"),
     ref: text("ref").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
@@ -138,6 +141,10 @@ export const clinic = pgTable("clinic", {
   area: text("area").notNull().default(""),
   bankName: text("bank_name").notNull().default(""),
   accountLast4: text("account_last4").notNull().default(""),
+  bankCode: text("bank_code").notNull().default(""),
+  codeFails: integer("code_fails").notNull().default(0), // wrong visit codes in a row
+  codeLockUntil: timestamp("code_lock_until"),
+  accountEnc: text("account_enc"), // full account number, sealed; used only to send Naira payouts
   verified: boolean("verified").notNull().default(false),
   chainAddress: text("chain_address"),
   chainSecretEnc: text("chain_secret_enc"),
@@ -179,4 +186,72 @@ export const funding = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [index("funding_sponsor_idx").on(t.sponsorId)]
+);
+
+/** A clinic cashing its USDC out through a Stellar anchor (SEP-24 withdraw). */
+export const payout = pgTable(
+  "payout",
+  {
+    id: text("id").primaryKey(),
+    clinicId: text("clinic_id").notNull().references(() => clinic.id, { onDelete: "cascade" }),
+    anchorTxId: text("anchor_tx_id").notNull(),
+    amountCents: integer("amount_cents").notNull().default(0), // what was sent to the anchor, known once the clinic has chosen an amount
+    status: text("status").notNull().default("pending"), // pending | sent | completed | failed
+    sentTx: text("sent_tx"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("payout_clinic_idx").on(t.clinicId)]
+);
+
+/** Naira paid to a clinic's bank account for one payment. */
+export const settlement = pgTable(
+  "settlement",
+  {
+    id: text("id").primaryKey(),
+    ledgerId: text("ledger_id").notNull().unique(),
+    clinicId: text("clinic_id").notNull().references(() => clinic.id, { onDelete: "cascade" }),
+    amountKobo: integer("amount_kobo").notNull(),
+    rate: integer("rate").notNull(), // Naira per US dollar, locked when the payment was made
+    provider: text("provider").notNull(), // mock | paystack
+    status: text("status").notNull().default("pending"), // pending | paid | failed
+    providerRef: text("provider_ref"),
+    sweepTx: text("sweep_tx"), // the clinic's USDC moving to the settlement account
+    failReason: text("fail_reason"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    paidAt: timestamp("paid_at"),
+  },
+  (t) => [index("settlement_clinic_idx").on(t.clinicId)]
+);
+
+/** A care plan: a package (antenatal care, a health check-up) made into steps with chosen providers. Holds no health records. */
+export const carePlan = pgTable(
+  "care_plan",
+  {
+    id: text("id").primaryKey(),
+    passId: text("pass_id").notNull().references(() => pass.id, { onDelete: "cascade" }),
+    packageId: text("package_id").notNull(),
+    createdBy: text("created_by").notNull(),
+    /** the plan's number on the pass vault when its money is locked on the network (escrow); null when it is not */
+    chainPlanId: integer("chain_plan_id"),
+    status: text("status").notNull().default("active"), // active | complete | cancelled
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("care_plan_pass_idx").on(t.passId)]
+);
+
+export const careStep = pgTable(
+  "care_step",
+  {
+    id: text("id").primaryKey(),
+    planId: text("plan_id").notNull().references(() => carePlan.id, { onDelete: "cascade" }),
+    idx: integer("idx").notNull(),
+    title: text("title").notNull(),
+    category: text("category").notNull(),
+    priceCents: integer("price_cents").notNull(),
+    clinicId: text("clinic_id").notNull().references(() => clinic.id),
+    status: text("status").notNull().default("pending"), // pending | done
+    doneAt: timestamp("done_at"),
+    ledgerId: text("ledger_id"),
+  },
+  (t) => [index("care_step_plan_idx").on(t.planId), index("care_step_clinic_idx").on(t.clinicId)]
 );

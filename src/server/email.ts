@@ -53,14 +53,14 @@ export function otpEmail(otp: string, to: string, minutes = 5, opts: { inlineLog
     <tr><td align="center" style="padding:26px 12px 0;font-family:${SANS};font-size:12px;line-height:1.7;color:#8a948d;">
       Sent to ${esc(to)}<br />
       <a href="${site}/terms" style="color:#6b7a72;text-decoration:underline;">Terms</a> &nbsp;·&nbsp; <a href="${site}/privacy" style="color:#6b7a72;text-decoration:underline;">Privacy</a> &nbsp;·&nbsp; <a href="mailto:${CONTACT_EMAIL}" style="color:#6b7a72;text-decoration:underline;">${CONTACT_EMAIL}</a><br />
-      CarePass · Send care, not cash
+      CarePass · Care for family back home
     </td></tr>
   </table>
 </td></tr>
 </table>
 </body>
 </html>`;
-  const text = `Your CarePass sign-in code is ${otp}\n\nIt works once and expires in ${minutes} minutes.\n\nKeep it to yourself. CarePass will never ask for this code by phone, chat or email. If you didn't try to sign in, you can ignore this message.\n\nCarePass · Send care, not cash\n${site}`;
+  const text = `Your CarePass sign-in code is ${otp}\n\nIt works once and expires in ${minutes} minutes.\n\nKeep it to yourself. CarePass will never ask for this code by phone, chat or email. If you didn't try to sign in, you can ignore this message.\n\nCarePass · Care for family back home\n${site}`;
   const attachments = [{ filename: "carepass.png", content: LOGO_PNG_BASE64, content_type: "image/png", content_id: LOGO_CID, disposition: "inline" }];
   return { attachments, subject: `${otp} is your CarePass sign-in code`, html, text };
 }

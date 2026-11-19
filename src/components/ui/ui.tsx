@@ -278,11 +278,13 @@ export function Money({ amount, size = "md", sign = "", className, digits = 2, h
   );
 }
 
-/* ---------- Stamp: a small inked label, like a clinic receipt ---------- */
-export function Stamp({ tone = "ok", children, className }: { tone?: "ok" | "no" | "wait"; children: ReactNode; className?: string }) {
-  return (
-    <span className={clsx("stamp", tone === "ok" && "border-brand-600/70 text-brand-700", tone === "no" && "border-rose-500/70 text-rose-700", tone === "wait" && "border-sun-600/60 text-sun-600", className)}>
-      {children}
-    </span>
+/* ---------- Stamp: a status label. Flat pill inside the product; the slanted ink stamp is for marketing pages only (slant) ---------- */
+export function Stamp({ tone = "ok", children, className, slant }: { tone?: "ok" | "no" | "wait"; children: ReactNode; className?: string; slant?: boolean }) {
+  const ink = tone === "ok" ? "border-brand-600/70 text-brand-700" : tone === "no" ? "border-rose-500/70 text-rose-700" : "border-sun-600/60 text-sun-600";
+  const flat = tone === "ok" ? "bg-brand-50 text-brand-800" : tone === "no" ? "bg-rose-50 text-rose-700" : "bg-sun-50 text-sun-600";
+  return slant ? (
+    <span className={clsx("stamp", ink, className)}>{children}</span>
+  ) : (
+    <span className={clsx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", flat, className)}>{children}</span>
   );
 }

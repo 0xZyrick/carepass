@@ -19,7 +19,7 @@ export const POST = authed(["sponsor"], async (req, me) => {
     await db.insert(schema.pass).values({
       id, sponsorId: me.id, familyEmail: `${b.name.toLowerCase()}+${tag}@demo.carepass.app`, fullName: b.fullName, name: b.name,
       relation: b.relation, phone: b.phone, city: b.city, hue: b.hue, last4: b.last4, balanceCents: Math.round(b.balance * 100),
-      monthlyLimitCents: b.monthlyLimit * 100, perTxLimitCents: b.perTxLimit * 100, allowed: b.allowed, frozen: false,
+      allowed: b.allowed, frozen: false,
       lastActiveAt: new Date(Date.now() - 2 * 86400000),
     });
   }

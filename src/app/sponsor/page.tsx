@@ -10,7 +10,7 @@ import { greet, ngn, usd } from "@/lib/format";
 import { Tx } from "@/lib/data";
 
 export default function Overview() {
-  const { me, beneficiaries, txs, requests, totalCredit, settledThisMonth, settledCount, blockedCount, spent, dismissRequest } = useStore();
+  const { me, beneficiaries, txs, requests, totalCredit, settledThisMonth, settledCount, blockedCount, carePlans, dismissRequest } = useStore();
   const [open, setOpen] = useState<Tx | null>(null);
   const who = (id: string) => beneficiaries.find((b) => b.id === id);
 
@@ -59,7 +59,6 @@ export default function Overview() {
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {beneficiaries.map((b) => {
-                const s = spent(b.id);
                 return (
                   <article key={b.id} className="card p-5">
                     <div className="flex items-center gap-3.5">
@@ -69,8 +68,15 @@ export default function Overview() {
                     </div>
                     <Money amount={b.balance} size="md" className="mt-5" />
                     <div className="mt-4">
-                      <div className="mb-1.5 flex justify-between text-xs font-semibold text-ink-mute"><span>Monthly limit</span><span>{usd(s, 0)} of {usd(b.monthlyLimit, 0)}</span></div>
-                      <Progress value={s} max={b.monthlyLimit} />
+                      {(() => {
+                      const plan = carePlans.find((p) => p.passId === b.id && p.status === "active");
+                      if (!plan) return <div className="text-xs font-semibold text-ink-mute">No care plan running</div>;
+                      const released = plan.steps.filter((x) => x.status === "done").reduce((a, x) => a + x.priceUsd, 0);
+                      return (<>
+                        <div className="mb-1.5 flex justify-between text-xs font-semibold text-ink-mute"><span>{plan.title}</span><span>{plan.doneCount} of {plan.steps.length} steps · {usd(released, 0)} of {usd(plan.totalUsd, 0)}</span></div>
+                        <Progress value={released} max={plan.totalUsd} />
+                      </>);
+                    })()}
                     </div>
                     <div className="mt-5 grid grid-cols-2 gap-2.5">
                       <Button href={`/sponsor/fund?to=${b.id}`} size="sm">Add money</Button>

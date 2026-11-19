@@ -9,7 +9,7 @@ export function SiteFooter() {
         <div className="grid grid-cols-1 gap-10 md:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
           <div>
             <Logo light />
-            <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/60">Send care, not cash. Pay for your family's healthcare in Nigeria from the US or UK, with every payment going to a verified provider.</p>
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/60">Care for family back home. Plan treatment in Nigeria from the US or UK, with every step confirmed by a verified provider.</p>
           </div>
           {[
             { h: "CarePass", l: [["How it works", "/#how"], ["Why it's safe", "/#safe"], ["How it's built", "/about"], ["Try a payment", "/try"]] },

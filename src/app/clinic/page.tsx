@@ -9,8 +9,10 @@ import { useStore, type ClinicInput, type MyClinic } from "@/lib/store";
 import { CATEGORIES, type Category } from "@/lib/data";
 import { dayLabel, ngn, usd } from "@/lib/format";
 import { receiptUrl } from "@/lib/site";
+import { CashOut } from "./CashOut";
+import { VisitBox } from "./VisitBox";
 
-const BANKS = ["Access Bank", "GTBank", "Zenith Bank", "First Bank", "UBA", "Fidelity Bank", "Stanbic IBTC", "Wema Bank", "Other"];
+import { BANKS } from "@/lib/banks";
 const field = "mt-2 h-[52px] w-full rounded-2xl border border-line-strong bg-white px-4 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15";
 
 export default function ClinicHome() {
@@ -24,7 +26,7 @@ function Setup({ existing, onDone }: { existing: MyClinic | null; onDone: () => 
   const { saveClinic, me } = useStore();
   const [f, setF] = useState<ClinicInput>({
     name: existing?.name ?? "", type: existing?.type ?? "hospital", city: existing?.city ?? "Lagos", area: existing?.area ?? "",
-    bankName: existing?.bankName ?? BANKS[0], accountLast4: existing?.accountLast4 ?? "",
+    bankName: existing?.bankName ?? BANKS[0], accountLast4: existing?.accountLast4 ?? "", accountNumber: "",
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -33,7 +35,7 @@ function Setup({ existing, onDone }: { existing: MyClinic | null; onDone: () => 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (f.name.trim().length < 2) return setErr("Enter the name of your clinic.");
-    if (f.accountLast4 && !/^\d{4}$/.test(f.accountLast4)) return setErr("Enter the last 4 digits of your account number.");
+    if (f.accountNumber && !/^\d{10}$/.test(f.accountNumber)) return setErr("Enter your 10-digit account number.");
     setBusy(true);
     const ok = await saveClinic(f, !!existing);
     setBusy(false);
@@ -63,12 +65,13 @@ function Setup({ existing, onDone }: { existing: MyClinic | null; onDone: () => 
           <input className={field} value={f.area} onChange={(e) => set("area", e.target.value)} placeholder="e.g. Yaba" /></label>
       </div>
 
-      <div className="mt-5 grid grid-cols-[1fr_130px] gap-3">
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr]">
         <label className="block"><span className="text-sm font-semibold">Bank for payouts</span>
           <select className={field} value={f.bankName} onChange={(e) => set("bankName", e.target.value)}>{BANKS.map((b) => <option key={b}>{b}</option>)}</select></label>
-        <label className="block"><span className="text-sm font-semibold">Account ends in</span>
-          <input className={clsx(field, "font-mono")} value={f.accountLast4} inputMode="numeric" maxLength={4} onChange={(e) => set("accountLast4", e.target.value.replace(/\D/g, ""))} placeholder="0000" /></label>
+        <label className="block"><span className="text-sm font-semibold">Account number</span>
+          <input className={clsx(field, "font-mono")} value={f.accountNumber} inputMode="numeric" maxLength={10} onChange={(e) => set("accountNumber", e.target.value.replace(/\D/g, ""))} placeholder={existing?.accountLast4 ? `•••••• ${existing.accountLast4}` : "10 digits"} autoComplete="off" /></label>
       </div>
+      <p className="mt-2 text-[13px] text-ink-mute">Used only to pay you in Naira after each payment. We store it encrypted and show only the last 4 digits.</p>
       {err && <p role="alert" className="mt-4 text-sm font-medium text-rose-700">{err}</p>}
       <div className="mt-8 flex gap-3">
         <Button type="submit" size="lg" full disabled={busy}>{existing ? "Save changes" : "Create my clinic"}</Button>
@@ -79,7 +82,7 @@ function Setup({ existing, onDone }: { existing: MyClinic | null; onDone: () => 
 }
 
 function Dashboard({ clinic, onEdit }: { clinic: MyClinic; onEdit: () => void }) {
-  const { clinicPayments } = useStore();
+  const { clinicPayments, refresh } = useStore();
   const [qr, setQr] = useState("");
   const payload = `carepass:clinic:${clinic.id}`;
   useEffect(() => { QRCode.toDataURL(payload, { margin: 1, width: 640, color: { dark: "#16241d", light: "#ffffff" } }).then(setQr).catch(() => setQr("")); }, [payload]);
@@ -131,6 +134,8 @@ function Dashboard({ clinic, onEdit }: { clinic: MyClinic; onEdit: () => void })
               </div>
             ))}
           </div>
+          <VisitBox verified={!pending} />
+          <CashOut verified={!pending} refreshKey={clinicPayments.length} />
           <p className="mt-3 text-[13px] text-ink-mute">{clinic.accountLast4 ? `Payouts go to ${clinic.bankName} ending ${clinic.accountLast4}.` : "Add your bank details under Edit to receive payouts."}</p>
 
           <h2 className="mt-7 font-display text-xl font-semibold">Payments received</h2>
@@ -139,8 +144,13 @@ function Dashboard({ clinic, onEdit }: { clinic: MyClinic; onEdit: () => void })
             {clinicPayments.map((p) => (
               <article key={p.id} className="flex items-center gap-3.5 rounded-2xl bg-white p-4 shadow-card">
                 <span className="grid h-11 w-11 place-items-center rounded-2xl bg-brand-50 text-brand-700"><Receipt className="h-5 w-5" /></span>
-                <div className="min-w-0 flex-1"><div className="truncate font-bold">{p.patient}</div><div className="truncate text-[13px] text-ink-mute">{p.note || "Payment"} · {dayLabel(p.daysAgo)}, {p.time}{p.chainTx && <> · <a href={receiptUrl(p.chainTx)} target="_blank" rel="noreferrer" className="font-semibold text-brand-700 underline">Network receipt</a></>}</div></div>
-                <Money amount={p.amount} size="sm" />
+                <div className="min-w-0 flex-1"><div className="truncate font-bold">{p.patient}</div><div className="truncate text-[13px] text-ink-mute">{p.note || "Payment"} · {dayLabel(p.daysAgo)}, {p.time}{p.hasReceipt && <> · <a href={`/verify/${p.id}`} target="_blank" rel="noreferrer" className="font-semibold text-brand-700 underline">Verify</a></>}{p.chainTx && <> · <a href={receiptUrl(p.chainTx)} target="_blank" rel="noreferrer" className="font-semibold text-brand-700 underline">Network receipt</a></>}</div></div>
+                <div className="flex flex-col items-end gap-1">
+                  <Money amount={p.amount} size="sm" />
+                  {p.settlement && (p.settlement.status === "paid" ? <Stamp tone="ok">₦{Math.round(p.settlement.ngn).toLocaleString()} paid to bank</Stamp>
+                    : p.settlement.status === "pending" ? <Stamp tone="wait">Paying to bank</Stamp>
+                    : <button onClick={async () => { await fetch(`/api/clinic/settlement/${p.id}/retry`, { method: "POST" }); await refresh(); }} title={p.settlement.reason} className="rounded-full"><Stamp tone="no">Payout failed · Retry</Stamp></button>)}
+                </div>
               </article>
             ))}
           </div>

@@ -3,7 +3,9 @@ import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db, schema } from "./db";
 import type { Me } from "./auth";
 import { CATEGORIES, Hue } from "@/lib/data";
-import { moonpayEnabled } from "./moonpay";
+import { settlementsFor, retryStale } from "./settlement";
+import { plansForPasses, visitsForClinic } from "./care";
+import { lockedByPass } from "./locked";
 import { anchorEnabled } from "./anchor";
 import { pinState } from "./pin";
 import { publicClinic, toMerchant } from "./clinics";
@@ -32,8 +34,6 @@ export const toBeneficiary = (r: PassRow) => ({
   initials: r.fullName.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase(),
   hue: r.hue as Hue,
   balance: r.balanceCents / 100,
-  monthlyLimit: r.monthlyLimitCents / 100,
-  perTxLimit: r.perTxLimitCents / 100,
   allowed: r.allowed as never,
   frozen: r.frozen,
   last4: r.last4,
@@ -50,6 +50,7 @@ export const toTx = (r: LedgerRow) => ({
   note: r.note ?? undefined,
   method: r.method ?? undefined,
   chainTx: r.chainTx ?? undefined,
+  receiptHash: r.receiptHash ?? undefined,
   ref: r.ref,
   at: r.createdAt.toISOString(),
 });
@@ -75,6 +76,7 @@ export async function loadState(me: Me) {
         db.select().from(topupRequest).where(inArray(topupRequest.passId, ids)).orderBy(desc(topupRequest.createdAt)),
       ])
     : [[], []];
+  const lockedMap = await lockedByPass(ids);
   const sponsorIds = [...new Set(rows.map((r) => r.sponsorId))];
   const sponsors = sponsorIds.length
     ? await db.select({ id: schema.user.id, name: schema.user.name }).from(schema.user).where(inArray(schema.user.id, sponsorIds))
@@ -84,12 +86,17 @@ export async function loadState(me: Me) {
   const clinicRows = me.role === "clinic" ? [] : await db.select().from(schema.clinic).where(eq(schema.clinic.verified, true)).limit(200);
   const myClinic = me.role === "clinic" ? (await db.select().from(schema.clinic).where(eq(schema.clinic.ownerId, me.id)))[0] ?? null : null;
   const myClinicView = myClinic ? publicClinic(myClinic) : null;
+  const settled = await settlementsFor((txs as LedgerRow[]).filter((t) => t.kind === "payment").map((t) => t.id));
   let clinicPayments: unknown[] = [];
   if (myClinic) {
+    void retryStale(myClinic.id).catch(() => {});
     const rowsP = await db.select({ l: ledger, fullName: pass.fullName }).from(ledger)
       .innerJoin(pass, eq(pass.id, ledger.passId)).where(and(eq(ledger.clinicId, myClinic.id), eq(ledger.kind, "payment")))
       .orderBy(desc(ledger.createdAt)).limit(200);
+    const sm = await settlementsFor(rowsP.map(({ l }) => l.id));
     clinicPayments = rowsP.map(({ l, fullName }) => ({
+      settlement: sm.get(l.id) ? { status: sm.get(l.id)!.status, ngn: sm.get(l.id)!.amountKobo / 100, ref: sm.get(l.id)!.providerRef ?? undefined, reason: sm.get(l.id)!.failReason ?? undefined } : undefined,
+      hasReceipt: !!l.receiptHash,
       id: l.id, amount: l.amountCents / 100, at: l.createdAt.toISOString(), ref: l.ref, note: l.note ?? "", chainTx: l.chainTx ?? undefined,
       patient: fullName.split(" ")[0] + " " + (fullName.split(" ")[1]?.[0] ?? "") + ".",
     }));
@@ -99,10 +106,12 @@ export async function loadState(me: Me) {
     clinics: clinicRows.map(toMerchant),
     myClinic: myClinicView,
     clinicPayments,
+    carePlans: await plansForPasses(ids),
+    visits: myClinic ? await visitsForClinic(myClinic.id) : [],
     previewEnabled: SPONSOR_PREVIEW,
-    fundingProviders: [...(anchorEnabled() ? ["anchor" as const] : []), ...(moonpayEnabled() ? ["moonpay" as const] : [])],
-    beneficiaries: rows.map((r) => ({ ...toBeneficiary(r), sponsorName: sponsorName.get(r.sponsorId) })),
-    txs: txs.map(toTx),
+    fundingProviders: anchorEnabled() ? ["anchor" as const] : [],
+    beneficiaries: rows.map((r) => { const lk = lockedMap.get(r.id) ?? 0; return { ...toBeneficiary(r), balance: Math.max(0, r.balanceCents - lk) / 100, locked: lk / 100, sponsorName: sponsorName.get(r.sponsorId) }; }),
+    txs: txs.map((t) => ({ ...toTx(t), settled: settled.get(t.id)?.status === "paid" })),
     requests: reqs.map((r) => ({
       id: r.id,
       beneficiaryId: r.passId,
@@ -121,15 +130,6 @@ export async function getOwnedPass(me: Me, id: string, as: "sponsor" | "family")
   if (SPONSOR_PREVIEW && row.sponsorId === me.id) return row;
   if (me.role === "family" && row.familyUserId === null && row.familyEmail === me.email) return row;
   return null;
-}
-
-export async function spentLast30Days(passId: string): Promise<number> {
-  const since = new Date(Date.now() - 30 * 86400000);
-  const [r] = await db
-    .select({ s: sql<number>`coalesce(sum(${ledger.amountCents}),0)::int` })
-    .from(ledger)
-    .where(and(eq(ledger.passId, passId), eq(ledger.kind, "payment"), gte(ledger.createdAt, since)));
-  return r?.s ?? 0;
 }
 
 export { and, eq, or, db, schema };

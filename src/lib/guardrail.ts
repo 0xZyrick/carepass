@@ -25,20 +25,13 @@ export function findMerchant(input: string): Merchant | undefined {
   return MERCHANTS.find((m) => m.addr.toUpperCase() === d || m.short.toUpperCase() === d);
 }
 
-export function spentThisMonth(txs: Tx[], id: string) {
-  return txs
-    .filter((t) => t.kind === "payment" && t.beneficiaryId === id && t.daysAgo < 30)
-    .reduce((s, t) => s + t.amount, 0);
-}
-
 /** Pure rule engine — the same logic the on-chain guardrail is modelled on. */
-export type Rules = Pick<Beneficiary, "frozen" | "allowed" | "perTxLimit" | "monthlyLimit" | "balance">;
+export type Rules = Pick<Beneficiary, "frozen" | "allowed" | "balance">;
 
 export function evaluatePayment(
   b: Rules,
   dest: string,
   amount: number,
-  spent: number,
   resolve: (dest: string) => Merchant | undefined = findMerchant
 ): Decision {
   const checks: Check[] = [];
@@ -57,8 +50,6 @@ export function evaluatePayment(
   run("whitelist", "Verified provider", !!m, `${m?.name} is a verified provider`, "This isn't a verified hospital, lab or pharmacy");
   const cat = m ? CATEGORIES.find((c) => c.id === m.type)?.plural : "";
   run("category", "Care type allowed", !!m && b.allowed.includes(m.type), `${cat} are allowed on this pass`, `${cat ?? "This"} isn't enabled on this pass`);
-  run("cap", "Within payment cap", amount <= b.perTxLimit, `${usd(amount)} is under the ${usd(b.perTxLimit, 0)} per-payment cap`, `Exceeds the ${usd(b.perTxLimit, 0)} per-payment cap`);
-  run("monthly", "Within monthly limit", spent + amount <= b.monthlyLimit, `${usd(b.monthlyLimit - spent - amount, 0)} left of this month's limit after this`, `Would exceed the ${usd(b.monthlyLimit, 0)} monthly limit`);
   run("balance", "Enough care credit", amount <= b.balance, "Balance covers this payment", `Only ${usd(b.balance)} available`);
 
   const bad = checks.find((c) => c.status === "fail");

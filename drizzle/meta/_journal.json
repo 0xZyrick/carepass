@@ -36,6 +36,41 @@
       "when": 1794817123442,
       "tag": "0004_anchor",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794897509000,
+      "tag": "0005_payout",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794960783042,
+      "tag": "0006_settlement",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794970027826,
+      "tag": "0007_care",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795059257350,
+      "tag": "0008_escrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795088834709,
+      "tag": "0009_retire_caps",
+      "breakpoints": true
     }
   ]
 }

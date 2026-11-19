@@ -113,3 +113,35 @@ Sponsors can fund a pass with **Stellar USDC**: the server signs in to the ancho
 - Run `npm run db:migrate` to apply migrations 0003 and 0004, and delete the old `public/testnet.json`.
 - Not yet tested live against the network from the build sandbox: run `npm run chain:test` first.
 - `ANCHOR_FUNDING=off` hides the option.
+
+## v11: clinic cash-out
+
+A verified clinic sees "Ready to cash out" (the USDC its account holds) and a Cash out button. The server signs in to the anchor as the clinic (SEP-10), opens a SEP-24 withdraw window, and once the clinic has chosen an amount it sends exactly that USDC to the anchor's account with the anchor's memo, once. Status and history show on the clinic dashboard. Needs the same `CHAIN_ANCHOR_DOMAIN` as funding, and `npm run db:migrate` for migration 0005. On mainnet, point `CHAIN_ANCHOR_DOMAIN` at a licensed Naira anchor.
+
+## v12: receipts you can verify, and Naira settlement
+
+**Receipt hash.** Every payment to a clinic gets a receipt (clinic, amount, care type, note, time, reference). Its sha256 is attached to the Stellar payment as a hash memo, and the receipt is stored. `/verify/<payment id>` is a public page that checks the stored receipt against its hash and against the memo on the network (Horizon), so neither the family nor the clinic can change the record later. The page names no patient. Itemised bill lines can be added to the receipt fields in `src/server/receipt.ts` (changing the field order changes every hash, so version it).
+
+**Naira settlement.** After a payment, `src/server/settlement.ts` sends the clinic's USDC to the settlement account (the admin account) and pays the locked Naira amount to the clinic's bank account. `SETTLEMENT_MODE=mock` simulates the bank transfer; `paystack` uses the Paystack Transfer API (test keys, with transfer OTP turned off in the dashboard). Clinics now enter their full account number, stored encrypted and shown as the last 4 digits. Failed payouts show a Retry button on the clinic dashboard. Run `npm run db:migrate` for migrations 0005 and 0006.
+
+## v13/v14: care plans (the care episode)
+
+A family or sponsor picks a **care package** (`src/lib/care.ts`: antenatal care, health check-up) and a verified provider in the family's city for each kind of care. Each step has a price, a provider and a status. The family shows a 6-digit **visit code** for the next step (derived from the step, nothing stored); the clinic enters it under "Confirm a visit", which marks the milestone done and releases that step's payment from the pass through the same rules and contract as any payment (caps, care types, balance), with a receipt. If the pass lacks funds the visit stays open and the same code works after a top-up. A clinic is locked out for 10 minutes after 5 wrong codes.
+
+Privacy by design: no documents, no diagnoses, no free-text health notes. Sponsors see milestones only; clinics see a patient's first name and initial; the public receipt page hides notes. Package names still imply a kind of care, so treat plans as personal data. Run `npm run db:migrate` for migration 0007. Package prices are estimates until providers set their own.
+
+v14 rewrites the landing page and About around care plans and adds two packages (ongoing care, dental).
+
+## v15: care-plan escrow on the vault contract
+
+The pass vault contract now holds the money for a care plan until each step is confirmed (see `contracts/README.md`). The app opens the plan on the vault when it is created (the pass needs enough money up front), releases each step when the clinic enters the family's visit code (the clinic's and the patient's keys both sign), and unlocks the rest if the plan is cancelled. The pass shows only spendable money; locked money is shown on the care plan. Vaults deployed before the upgrade fall back to the earlier behavior. Turn escrow off with `CHAIN_ESCROW=off`. Run `npm run db:migrate` (migration 0008), rebuild and upload the contract (`contracts/scripts/chain-env.sh`), set the new `CHAIN_PASS_WASM_HASH`, then `npm run chain:test`.
+
+Both signing keys are still held by the server, so today the contract enforces the structure (locked money, order, fixed amounts and providers, two required signatures) but the server decides when to sign. Moving the patient's key to a passkey on their phone is what makes that second signature independent.
+
+## v16: the care plan is the limit
+
+The per-payment cap and the monthly limit are gone. A sponsor funds a whole care package; each step has a fixed provider and amount, locked in the vault when the plan starts and released only when the clinic confirms the visit. What remains: allowed care types, verified providers only, the pause switch, and enough unlocked balance.
+
+- Contract: constructor is now `(sponsor, beneficiary, token, registry, allowed_mask)`; `set_rules(allowed_mask)`. **Existing vaults must be redeployed** (rerun `contracts/scripts/chain-env.sh`, set the new `CHAIN_PASS_WASM_HASH`, create new passes).
+- Database: migration `0009_retire_caps` (the old columns stay with default 0). Run `npm run db:migrate`.
+- Tests: `npm run test:contract` (20 Rust tests), `npm run test:app` (API, care plans, settlement, cash-out), `npm run chain:test` (live testnet, needs the CHAIN_* env).

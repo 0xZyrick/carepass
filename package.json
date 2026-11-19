@@ -10,7 +10,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npx tsx scripts/migrate.mts",
     "chain:test": "npx tsx scripts/chain-selftest.mts",
-    "moonpay:check": "npx tsx scripts/moonpay-check.mts"
+    "moonpay:check": "npx tsx scripts/moonpay-check.mts",
+    "test:app": "bash tests/run-all.sh",
+    "test:contract": "cd contracts && cargo test -p carepass-pass"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.16",

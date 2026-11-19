@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { authed, body, err, money } from "@/server/http";
-import { db, getOwnedPass, refCode, schema, spentLast30Days, toBeneficiary, toTx, uid } from "@/server/passes";
+import { db, getOwnedPass, refCode, schema, toBeneficiary, toTx, uid } from "@/server/passes";
 import { evaluatePayment, findMerchant } from "@/lib/guardrail";
 import { checkPin } from "@/server/pin";
 import { toMerchant, verifiedClinicByDest } from "@/server/clinics";
 import { CONTRACT_REASON, ChainError, chainOn, payOnChain, prepareClinicPayment } from "@/server/chain";
+import { hashReceipt, type Receipt } from "@/server/receipt";
+import { lockedCents } from "@/server/locked";
+import { settle, settlementMode } from "@/server/settlement";
+import { after } from "next/server";
 
 export const maxDuration = 60;
 
@@ -25,8 +29,10 @@ export const POST = authed<{ id: string }>(["family", "sponsor"], async (req, me
 
   const clinic = await verifiedClinicByDest(dest);
   const resolve = (d: string) => (clinic ? toMerchant(clinic) : findMerchant(d));
-  const spent = await spentLast30Days(id);
-  const decision = evaluatePayment(toBeneficiary(row), dest, amount, spent / 100, resolve);
+  const locked = await lockedCents(id); // money locked for care-plan steps is not free to spend
+  const view = toBeneficiary(row);
+  view.balance = Math.max(0, row.balanceCents - locked) / 100;
+  const decision = evaluatePayment(view, dest, amount, resolve);
   const m = decision.merchant;
 
   // With the network connected, payments to registered clinics go through the pass's contract.
@@ -44,13 +50,18 @@ export const POST = authed<{ id: string }>(["family", "sponsor"], async (req, me
     const [saved] = await db
       .update(schema.pass)
       .set({ balanceCents: sql`${schema.pass.balanceCents} - ${c}`, lastActiveAt: new Date() })
-      .where(and(eq(schema.pass.id, id), eq(schema.pass.frozen, false), gte(schema.pass.balanceCents, c)))
+      .where(and(eq(schema.pass.id, id), eq(schema.pass.frozen, false), gte(schema.pass.balanceCents, c + locked)))
       .returning();
     if (saved) {
       let chainTx: string | null = null;
       let refused: string | null = null;
+      // The receipt is fixed before the payment is made, and its hash travels with the payment on the network.
+      const ledgerId = uid(), ref = refCode(), at = new Date();
+      const note = String(b.note ?? "").trim().slice(0, 60);
+      const receipt: Receipt | null = clinic ? { v: 1, ref, clinicId: clinic.id, clinic: clinic.name, category: m!.type, amountCents: c, note, at: at.toISOString() } : null;
+      const receiptHash = receipt ? hashReceipt(receipt) : null;
       if (clinicAddress) {
-        try { chainTx = await payOnChain(id, clinicAddress, c); }
+        try { chainTx = await payOnChain(id, clinicAddress, c, receiptHash ?? undefined); }
         catch (e) {
           // The contract said no (or the network failed): give the reserved amount back. Nothing was spent.
           await db.update(schema.pass).set({ balanceCents: sql`${schema.pass.balanceCents} + ${c}` }).where(eq(schema.pass.id, id));
@@ -63,8 +74,9 @@ export const POST = authed<{ id: string }>(["family", "sponsor"], async (req, me
       }
       if (!refused) {
         const [tx] = await db.insert(schema.ledger).values({
-          id: uid(), passId: id, kind: "payment", amountCents: c, merchantLabel: m!.name, clinicId: clinic?.id ?? null, category: m!.type, note: String(b.note ?? "").trim().slice(0, 60) || null, ref: refCode(), chainTx,
+          id: ledgerId, passId: id, kind: "payment", amountCents: c, merchantLabel: m!.name, clinicId: clinic?.id ?? null, category: m!.type, note: note || null, ref, chainTx, createdAt: at, receiptHash, receipt,
         }).returning();
+        if (clinic && settlementMode() !== "off") after(async () => { try { await settle(tx.id); } catch (e) { console.error("[settle] failed:", e instanceof Error ? e.message : e); } });
         return NextResponse.json({ decision, tx: toTx(tx), beneficiary: toBeneficiary(saved) });
       }
       decision.approved = false;

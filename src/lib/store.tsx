@@ -9,12 +9,15 @@ import { ago, clock, daysSince } from "./format";
 interface Toast { id: number; msg: string; tone: "ok" | "warn" }
 export interface Me { id: string; name: string; email: string; role: "sponsor" | "family" | "clinic" | null; hasPin?: boolean }
 export interface MyClinic { id: string; name: string; type: Category; city: "Lagos" | "Abuja"; area: string; bankName: string; accountLast4: string; verified: boolean }
-export interface ClinicPayment { chainTx?: string; id: string; amount: number; at: string; ref: string; note: string; patient: string; daysAgo: number; time: string }
-export type ClinicInput = { name: string; type: Category; city: "Lagos" | "Abuja"; area: string; bankName: string; accountLast4: string };
+export interface ClinicPayment { chainTx?: string; hasReceipt?: boolean; settlement?: { status: "pending" | "paid" | "failed"; ngn: number; ref?: string; reason?: string }; id: string; amount: number; at: string; ref: string; note: string; patient: string; daysAgo: number; time: string }
+export interface CareStep { id: string; idx: number; title: string; category: Category; priceUsd: number; when: string; clinicId: string; clinicName: string; status: "pending" | "done"; doneAt: string | null; receiptId: string | null }
+export interface CarePlan { escrow: boolean; lockedUsd: number; id: string; passId: string; packageId: string; title: string; status: "active" | "complete" | "cancelled"; totalUsd: number; doneCount: number; nextStepId: string | null; steps: CareStep[]; at: string }
+export interface ClinicVisit { id: string; title: string; priceUsd: number; status: "pending" | "done"; doneAt: string | null; patient: string; package: string }
+export type ClinicInput = { name: string; type: Category; city: "Lagos" | "Abuja"; area: string; bankName: string; accountLast4: string; accountNumber?: string };
 
 type NewPass = {
   fullName: string; email: string; relation: string; phone: string; city: "Lagos" | "Abuja";
-  monthlyLimit: number; perTxLimit: number; allowed: Category[];
+  allowed: Category[];
 };
 export type PayResult = { decision: Decision; tx: Tx };
 export type PayOutcome = PayResult | { error: string; status: number };
@@ -23,7 +26,13 @@ interface Store {
   me: Me | null;
   loading: boolean;
   previewEnabled: boolean;
-  fundingProviders: ("anchor" | "moonpay")[];
+  fundingProviders: "anchor"[];
+  carePlans: CarePlan[];
+  visits: ClinicVisit[];
+  startPlan: (passId: string, packageId: string, providers: Record<string, string>) => Promise<boolean>;
+  cancelPlan: (id: string) => Promise<void>;
+  getVisitCode: (stepId: string) => Promise<{ code: string; clinicName: string; title: string } | null>;
+  confirmVisit: (code: string) => Promise<{ title: string; priceUsd: number; patient: string } | null>;
   beneficiaries: Beneficiary[];
   merchants: Merchant[];
   myClinic: MyClinic | null;
@@ -37,13 +46,12 @@ interface Store {
   settledThisMonth: number;
   settledCount: number;
   blockedCount: number;
-  spent: (id: string) => number;
   refresh: () => Promise<void>;
   topUp: (id: string, amount: number, method: string) => Promise<Tx | null>;
-  startFunding: (passId: string, amount: number, provider: "anchor" | "moonpay") => Promise<{ id: string; url: string } | null>;
-  syncFunding: (id: string) => Promise<boolean>;
+  startFunding: (passId: string, amount: number, provider: "anchor") => Promise<{ id: string; url: string } | null>;
+  syncFunding: (id: string) => Promise<"done" | "pending" | "failed">;
   addBeneficiary: (b: NewPass) => Promise<Beneficiary | null>;
-  updateBeneficiary: (id: string, patch: Partial<Pick<Beneficiary, "frozen" | "monthlyLimit" | "perTxLimit" | "allowed">>) => Promise<boolean>;
+  updateBeneficiary: (id: string, patch: Partial<Pick<Beneficiary, "frozen" | "allowed">>) => Promise<boolean>;
   pay: (id: string, dest: string, amount: number, note?: string, pin?: string) => Promise<PayOutcome>;
   createPin: (pin: string) => Promise<boolean>;
   saveClinic: (c: ClinicInput, existing: boolean) => Promise<boolean>;
@@ -80,7 +88,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [previewEnabled, setPreview] = useState(false);
-  const [fundingProviders, setProviders] = useState<("anchor" | "moonpay")[]>([]);
+  const [fundingProviders, setProviders] = useState<"anchor"[]>([]);
+  const [carePlans, setPlans] = useState<CarePlan[]>([]);
+  const [visits, setVisits] = useState<ClinicVisit[]>([]);
   const [beneficiaries, setB] = useState<Beneficiary[]>([]);
   const [clinics, setClinics] = useState<Merchant[]>([]);
   const [myClinic, setMyClinic] = useState<MyClinic | null>(null);
@@ -105,10 +115,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    const r = await call<{ me: Me; previewEnabled: boolean; fundingProviders: ("anchor" | "moonpay")[]; beneficiaries: Beneficiary[]; clinics: Merchant[]; myClinic: MyClinic | null; clinicPayments: (Omit<ClinicPayment, "daysAgo" | "time">)[]; txs: Tx[]; requests: TopupRequest[] }>("/api/state", "GET");
+    const r = await call<{ me: Me; previewEnabled: boolean; fundingProviders: "anchor"[]; carePlans: CarePlan[]; visits: ClinicVisit[]; beneficiaries: Beneficiary[]; clinics: Merchant[]; myClinic: MyClinic | null; clinicPayments: (Omit<ClinicPayment, "daysAgo" | "time">)[]; txs: Tx[]; requests: TopupRequest[] }>("/api/state", "GET");
     if (r.ok) {
       const bs = r.json.beneficiaries.map(mapB);
-      setMe(r.json.me); setPreview(r.json.previewEnabled); setProviders(r.json.fundingProviders ?? []);
+      setMe(r.json.me); setPreview(r.json.previewEnabled); setProviders(r.json.fundingProviders ?? []); setPlans(r.json.carePlans ?? []); setVisits(r.json.visits ?? []);
       setClinics(r.json.clinics ?? []); setMyClinic(r.json.myClinic ?? null);
       setClinicPayments((r.json.clinicPayments ?? []).map((p) => ({ ...p, daysAgo: daysSince(p.at), time: clock(p.at) })));
       setB(bs); setTxs(r.json.txs.map(mapTx)); setReq(r.json.requests.map(mapReq));
@@ -118,7 +128,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return pick ?? bs[0]?.id ?? "";
       });
     } else if (r.status === 401) {
-      setMe(null); setB([]); setTxs([]); setReq([]); setClinics([]); setMyClinic(null); setClinicPayments([]);
+      setMe(null); setPlans([]); setVisits([]); setB([]); setTxs([]); setReq([]); setClinics([]); setMyClinic(null); setClinicPayments([]);
     }
     loaded.current = true;
     setLoading(false);
@@ -136,14 +146,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const month = txs.filter((t) => t.daysAgo < 30);
     const paid = month.filter((t) => t.kind === "payment");
     return {
-      me, loading, previewEnabled, fundingProviders, beneficiaries, myClinic, clinicPayments,
+      me, loading, previewEnabled, fundingProviders, carePlans, visits, beneficiaries, myClinic, clinicPayments,
       merchants: previewEnabled ? [...MERCHANTS, ...clinics] : clinics,
       txs, requests, toasts, activePassId, setActivePassId,
       totalCredit: beneficiaries.reduce((s, b) => s + b.balance, 0),
       settledThisMonth: paid.reduce((s, t) => s + t.amount, 0),
       settledCount: paid.length,
       blockedCount: month.filter((t) => t.kind === "blocked").length,
-      spent: (id) => txs.filter((t) => t.kind === "payment" && t.beneficiaryId === id && t.daysAgo < 30).reduce((s, t) => s + t.amount, 0),
       toast, refresh,
       topUp: async (id, amount, method) => {
         const r = await call<{ tx: Tx }>(`/api/passes/${id}/topup`, "POST", { amount, method });
@@ -157,9 +166,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       syncFunding: async (id) => {
         const r = await call<{ funding: { credited: boolean; status: string } }>(`/api/funding/${id}/sync`, "POST");
-        if (!r.ok) return false;
-        if (r.json.funding.credited) { await refresh(); return true; }
-        return false;
+        if (!r.ok) return "pending";
+        if (r.json.funding.credited) { await refresh(); return "done"; }
+        return r.json.funding.status === "failed" ? "failed" : "pending";
       },
       addBeneficiary: async (input) => {
         const r = await call<{ beneficiary: Beneficiary }>("/api/passes", "POST", input);
@@ -197,6 +206,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setReq((p) => p.filter((x) => x.id !== id));
         const r = await call(`/api/requests/${id}`, "DELETE");
         if (!r.ok) { fail(r.json.error); await refresh(); }
+      },
+      startPlan: async (passId, packageId, providers) => {
+        const r = await call("/api/care/plans", "POST", { passId, packageId, providers });
+        if (!r.ok) { fail(r.json.error); return false; }
+        await refresh(); return true;
+      },
+      cancelPlan: async (id) => { const r = await call(`/api/care/plans/${id}/cancel`, "POST"); if (!r.ok) fail(r.json.error); await refresh(); },
+      getVisitCode: async (stepId) => {
+        const r = await call<{ code: string; clinicName: string; title: string }>(`/api/care/steps/${stepId}/code`, "GET");
+        if (!r.ok) return fail(r.json.error);
+        return r.json;
+      },
+      confirmVisit: async (code) => {
+        const r = await call<{ title: string; priceUsd: number; patient: string }>("/api/clinic/visits", "POST", { code });
+        if (!r.ok) return fail(r.json.error);
+        await refresh(); return r.json;
       },
       seedDemo: async (reset) => {
         const r = await call(`/api/demo/seed${reset ? "?reset=1" : ""}`, "POST");

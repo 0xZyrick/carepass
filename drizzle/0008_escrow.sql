@@ -1,0 +1,1 @@
+ALTER TABLE "care_plan" ADD COLUMN "chain_plan_id" integer;

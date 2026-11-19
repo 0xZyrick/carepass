@@ -81,6 +81,10 @@ export function TxDetailSheet({ tx, who, onClose, perspective = "sponsor", phone
           </div>
         ))}
       </dl>
+      {tx.receiptHash && (
+        <a href={`/verify/${tx.id}`} target="_blank" rel="noreferrer" className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-brand-500/40 bg-brand-50 text-sm font-semibold text-brand-800">Verify receipt <span aria-hidden>↗</span></a>
+      )}
+      {tx.settled && <p className="mt-3 text-center text-[13px] text-ink-mute">The clinic has been paid in Naira.</p>}
       {tx.chainTx && (
         <a href={receiptUrl(tx.chainTx)} target="_blank" rel="noreferrer" className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-brand-500/40 bg-brand-50 text-sm font-semibold text-brand-800">Network receipt <span aria-hidden>↗</span></a>
       )}

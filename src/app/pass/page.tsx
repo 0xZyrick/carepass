@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { BadgeCheck, Eye, EyeOff, HandCoins, MapPin, ScanLine, Send, Snowflake } from "lucide-react";
+import { BadgeCheck, HeartPulse, Eye, EyeOff, HandCoins, MapPin, ScanLine, Send, Snowflake } from "lucide-react";
 import clsx from "clsx";
 import { Avatar, Button, CatIcon, Money, Progress, Sheet } from "@/components/ui/ui";
+import { CarePlanCard } from "@/components/CarePlanCard";
 import { AccountSheet } from "@/components/AccountSheet";
 import { PassCard } from "@/components/PassCard";
 import { TxDetailSheet, TxRow } from "@/components/TxRow";
@@ -15,7 +16,7 @@ import { greet, ngn, usd } from "@/lib/format";
 const REASONS = ["Hospital visit", "Medicine", "Lab tests", "Dental", "Emergency"];
 
 export default function PassHome() {
-  const { beneficiaries, activePassId, setActivePassId, txs, spent, requestTopUp, requests, toast, merchants } = useStore();
+  const { carePlans, beneficiaries, activePassId, setActivePassId, txs, requestTopUp, requests, toast, merchants } = useStore();
   const b = beneficiaries.find((x) => x.id === activePassId) ?? beneficiaries[0];
   const [hide, setHide] = useState(false);
   const [account, setAccount] = useState(false);
@@ -24,8 +25,7 @@ export default function PassHome() {
   const [amt, setAmt] = useState(50);
   const [why, setWhy] = useState(REASONS[0]);
   const [open, setOpen] = useState<Tx | null>(null);
-  const s = spent(b.id);
-  const left = Math.max(0, b.monthlyLimit - s);
+  const plan = carePlans.find((p) => p.passId === b.id && p.status === "active") ?? carePlans.find((p) => p.passId === b.id && p.status === "complete");
   const pending = requests.find((r) => r.beneficiaryId === b.id);
   const sponsor = b.sponsorName ?? "your sponsor";
   const near = merchants.filter((m) => m.city === b.city && b.allowed.includes(m.type)).sort((a, c) => a.distKm - c.distKm).slice(0, 3);
@@ -46,6 +46,8 @@ export default function PassHome() {
         </button>
         <button onClick={() => setAccount(true)} className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-ink-soft shadow-card">Account</button>
       </header>
+
+      {plan && <div className="mt-6"><CarePlanCard plan={plan} mode="family" /></div>}
 
       <div className="relative mt-6">
         <PassCard name={b.fullName} balance={b.balance} last4={b.last4} hue={b.hue} frozen={b.frozen} hidden={hide} />
@@ -70,12 +72,12 @@ export default function PassHome() {
 
       {pending && <div className="mt-5 flex items-center gap-3 rounded-2xl bg-sun-50 p-4 text-sm text-sun-600"><Send className="h-5 w-5 shrink-0" /><p><strong>Request sent.</strong> {sponsor} has been asked for {usd(pending.amount, 0)}.</p></div>}
 
-      <section className="mt-6 rounded-3xl bg-white p-5 shadow-card" aria-label="Monthly spending">
-        <div className="text-sm font-semibold text-ink-mute">Left to spend this month</div>
-        <Money amount={left} size="md" digits={0} className="mt-1" />
-        <div className="mt-3"><Progress value={s} max={b.monthlyLimit} /></div>
-        <div className="mt-2 text-xs text-ink-mute">{usd(s, 0)} used of {usd(b.monthlyLimit, 0)}</div>
-      </section>
+      {!plan && (
+        <Link href="/pass/care" className="mt-6 flex items-center gap-4 rounded-3xl bg-white p-5 shadow-card transition active:scale-[0.99]">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-brand-50 text-brand-700"><HeartPulse className="h-6 w-6" /></span>
+          <div className="min-w-0 flex-1"><div className="font-bold">Plan your care</div><div className="text-sm text-ink-mute">Pick a package, choose a clinic, and follow each step.</div></div>
+        </Link>
+      )}
 
       {near.length > 0 && (
         <section className="mt-7" aria-label="Nearby clinics">

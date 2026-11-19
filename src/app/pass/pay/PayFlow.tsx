@@ -41,6 +41,7 @@ export function PayFlow() {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [ref, setRef] = useState("");
   const [chainTx, setChainTx] = useState("");
+  const [verifyId, setVerifyId] = useState("");
   const [payErr, setPayErr] = useState("");
   const [typing, setTyping] = useState(false);
   const [code, setCode] = useState("");
@@ -87,7 +88,7 @@ export function PayFlow() {
       if (res.status === 403 || res.status === 429 || res.status === 428) { setPin(""); setPinMsg(res.error); setStep("pin"); return; }
       setPayErr(res.error); setStep("amount"); return;
     }
-    setPayErr(""); setChainTx(res.tx.chainTx ?? "");
+    setPayErr(""); setChainTx(res.tx.chainTx ?? ""); setVerifyId(res.tx.receiptHash ? res.tx.id : "");
     setDecision(res.decision); setRef(res.tx.ref); setStep("result");
   }
 
@@ -228,6 +229,7 @@ export function PayFlow() {
               ))}
             </ul>
             <p className="mt-6 font-mono text-xs text-ink-faint">Ref {ref}</p>
+            {ok && verifyId && <a href={`/verify/${verifyId}`} target="_blank" rel="noreferrer" className="mt-2 block text-xs font-semibold text-brand-700 underline">Verify this receipt ↗</a>}
             {ok && chainTx && <a href={receiptUrl(chainTx)} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-semibold text-brand-700 underline">Confirmed on the network ↗</a>}
           </div>
         </div>

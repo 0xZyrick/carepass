@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../.."
 NET=testnet
 secret() { stellar keys secret "$1" 2>/dev/null || stellar keys show "$1"; }
 WASM=contracts/target/wasm32v1-none/release/carepass_pass.wasm
-[ -f "$WASM" ] || (cd contracts && stellar contract build >&2)
+(cd contracts && stellar contract build >&2) # always rebuild so the newest vault (with care-plan escrow) is what gets uploaded
 HASH=$(stellar contract upload --wasm "$WASM" --source cp-admin --network $NET)
 read_json() { node -e "console.log(JSON.parse(require('fs').readFileSync('public/testnet.json','utf8')).$1)"; }
 echo "CHAIN_ADMIN_SECRET=$(secret cp-admin)"

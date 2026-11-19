@@ -43,7 +43,7 @@ add "$C3" "PathCare Diagnostics" 1
 say "6/7 Deploying the pass for the demo family member (\$300/month, \$150/payment, hospital + pharmacy only)"
 PASS=$(stellar contract deploy --wasm $WASM/carepass_pass.wasm --source cp-sponsor --network $NET -- \
   --sponsor "$SPONSOR" --beneficiary "$FAMILY" --token "$TOKEN" --registry "$REGISTRY" \
-  --monthly_limit $((300*USDC)) --per_tx_limit $((150*USDC)) --allowed_mask 5)
+  --allowed_mask 5)
 stellar contract invoke --id "$TOKEN" --source cp-issuer --network $NET -- mint --to "$PASS" --amount $((200*USDC)) >/dev/null
 
 say "7/7 Writing ../public/testnet.json"

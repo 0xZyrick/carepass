@@ -707,6 +707,14 @@
                           },
                           {
                             "key": {
+                              "symbol": "reserved"
+                            },
+                            "val": {
+                              "i128": "0"
+                            }
+                          },
+                          {
+                            "key": {
                               "symbol": "spent"
                             },
                             "val": {

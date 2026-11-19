@@ -3,19 +3,23 @@
 //!
 //! The contract itself holds the USDC. Nobody (not even CarePass) can move it except through the rules below:
 //!  * the BENEFICIARY can only `pay` a merchant that is on the registry whitelist, whose care type is allowed,
-//!    within the per-payment cap and the rolling 30-day limit, and only while the pass is not frozen;
+//!    and only while the pass is not frozen and the vault holds enough unlocked money;
 //!  * the SPONSOR can change the rules, freeze/unfreeze, and take unspent funds back.
 //! Anyone can top the vault up by sending the token to the contract address.
+//!
+//! CARE PLANS (escrow). The sponsor can open a plan: a list of steps, each with a verified provider and an amount.
+//! The money for every step is locked in the vault the moment the plan opens (it can't be paid elsewhere or withdrawn).
+//! A step is released only when BOTH the provider and the patient sign `confirm_step`, and only in order. The sponsor's
+//! plan IS the limit: providers and amounts are fixed when it opens, and the plan is fully funded up front.
+//! The sponsor can cancel a plan to unlock whatever has not been released.
 
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractevent, contractimpl, contracttype, token, Address, Env,
+    contract, contractclient, contracterror, contractevent, contractimpl, contracttype, token, Address, Env, Vec,
 };
 
 const DAY: u32 = 17_280; // ledgers per day (~5s)
 const TTL_THRESHOLD: u32 = 30 * DAY;
 const TTL_EXTEND: u32 = 180 * DAY;
-/// Length of the spending window, in seconds (30 days).
-pub const WINDOW_SECS: u64 = 30 * 24 * 60 * 60;
 
 /// Minimal interface of the registry contract (kept local so this crate doesn't depend on its code at runtime).
 #[contractclient(name = "RegistryClient")]
@@ -35,8 +39,6 @@ pub struct Config {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Rules {
-    pub monthly_limit: i128,
-    pub per_tx_limit: i128,
     /// Bit `n` set = care category `n` allowed (0 hospital, 1 lab, 2 pharmacy, 3 dental, 4 optical).
     pub allowed_mask: u32,
 }
@@ -45,8 +47,29 @@ pub struct Rules {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct State {
     pub frozen: bool,
-    pub window_start: u64,
-    pub spent: i128,
+    /// Money locked for care-plan steps that have not been released yet.
+    pub reserved: i128,
+}
+
+/// What the sponsor asks for when opening a plan.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StepSpec {
+    pub merchant: Address,
+    pub amount: i128,
+}
+
+pub const STEP_PENDING: u32 = 0;
+pub const STEP_DONE: u32 = 1;
+pub const STEP_CANCELLED: u32 = 2;
+pub const MAX_STEPS: u32 = 12;
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Step {
+    pub merchant: Address,
+    pub amount: i128,
+    pub status: u32,
 }
 
 #[contracttype]
@@ -55,6 +78,8 @@ enum DataKey {
     Config,
     Rules,
     State,
+    NextPlan,
+    Plan(u64),
 }
 
 #[contracterror]
@@ -65,10 +90,13 @@ pub enum Error {
     Frozen = 2,
     NotWhitelisted = 3,
     CategoryNotAllowed = 4,
-    OverPaymentCap = 5,
-    OverMonthlyLimit = 6,
     InsufficientBalance = 7,
     InvalidRules = 8,
+    PlanNotFound = 9,
+    StepNotFound = 10,
+    StepNotPending = 11,
+    OutOfOrder = 12,
+    BadPlan = 13,
 }
 
 #[contractevent]
@@ -85,9 +113,30 @@ pub struct FrozenChanged {
 
 #[contractevent]
 pub struct RulesChanged {
-    pub monthly_limit: i128,
-    pub per_tx_limit: i128,
     pub allowed_mask: u32,
+}
+
+#[contractevent]
+pub struct PlanOpened {
+    #[topic]
+    pub plan_id: u64,
+    pub total: i128,
+}
+
+#[contractevent]
+pub struct StepConfirmed {
+    #[topic]
+    pub plan_id: u64,
+    pub index: u32,
+    pub merchant: Address,
+    pub amount: i128,
+}
+
+#[contractevent]
+pub struct PlanCancelled {
+    #[topic]
+    pub plan_id: u64,
+    pub released_back: i128,
 }
 
 #[contractevent]
@@ -106,16 +155,14 @@ impl Pass {
         beneficiary: Address,
         token: Address,
         registry: Address,
-        monthly_limit: i128,
-        per_tx_limit: i128,
         allowed_mask: u32,
     ) -> Result<(), Error> {
-        let rules = Rules { monthly_limit, per_tx_limit, allowed_mask };
+        let rules = Rules { allowed_mask };
         Self::validate(&rules)?;
         let s = env.storage().instance();
         s.set(&DataKey::Config, &Config { sponsor, beneficiary, token, registry });
         s.set(&DataKey::Rules, &rules);
-        s.set(&DataKey::State, &State { frozen: false, window_start: 0, spent: 0 });
+        s.set(&DataKey::State, &State { frozen: false, reserved: 0 });
         Ok(())
     }
 
@@ -127,11 +174,6 @@ impl Pass {
         cfg.beneficiary.require_auth();
         Self::evaluate(&env, &merchant, amount)?;
 
-        let mut st = Self::state(&env);
-        let (start, spent) = Self::window(&env, &st);
-        st.window_start = start;
-        st.spent = spent + amount;
-        env.storage().instance().set(&DataKey::State, &st);
         env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND);
 
         token::Client::new(&env, &cfg.token).transfer(&env.current_contract_address(), &merchant, &amount);
@@ -146,12 +188,12 @@ impl Pass {
 
     // ---------------------------------------------------------------- sponsor
 
-    pub fn set_rules(env: Env, monthly_limit: i128, per_tx_limit: i128, allowed_mask: u32) -> Result<(), Error> {
+    pub fn set_rules(env: Env, allowed_mask: u32) -> Result<(), Error> {
         Self::config(&env).sponsor.require_auth();
-        let rules = Rules { monthly_limit, per_tx_limit, allowed_mask };
+        let rules = Rules { allowed_mask };
         Self::validate(&rules)?;
         env.storage().instance().set(&DataKey::Rules, &rules);
-        RulesChanged { monthly_limit, per_tx_limit, allowed_mask }.publish(&env);
+        RulesChanged { allowed_mask }.publish(&env);
         Ok(())
     }
 
@@ -171,11 +213,112 @@ impl Pass {
             return Err(Error::InvalidAmount);
         }
         let t = token::Client::new(&env, &cfg.token);
-        if t.balance(&env.current_contract_address()) < amount {
+        if t.balance(&env.current_contract_address()) - Self::state(&env).reserved < amount {
             return Err(Error::InsufficientBalance);
         }
         t.transfer(&env.current_contract_address(), &cfg.sponsor, &amount);
         Withdrawn { amount }.publish(&env);
+        Ok(())
+    }
+
+    // ---------------------------------------------------------------- care plans
+
+    /// Opens a care plan and locks the money for every step. Returns the plan's number.
+    pub fn open_plan(env: Env, steps: Vec<StepSpec>) -> Result<u64, Error> {
+        let cfg = Self::config(&env);
+        cfg.sponsor.require_auth();
+        if steps.is_empty() || steps.len() > MAX_STEPS {
+            return Err(Error::BadPlan);
+        }
+        let mut st = Self::state(&env);
+        if st.frozen {
+            return Err(Error::Frozen);
+        }
+        let rules: Rules = env.storage().instance().get(&DataKey::Rules).unwrap();
+        let registry = RegistryClient::new(&env, &cfg.registry);
+        let mut total: i128 = 0;
+        let mut out: Vec<Step> = Vec::new(&env);
+        for s in steps.iter() {
+            if s.amount <= 0 {
+                return Err(Error::InvalidAmount);
+            }
+            let category = registry.category_of(&s.merchant).ok_or(Error::NotWhitelisted)?;
+            if category >= 32 || rules.allowed_mask & (1u32 << category) == 0 {
+                return Err(Error::CategoryNotAllowed);
+            }
+            total += s.amount;
+            out.push_back(Step { merchant: s.merchant, amount: s.amount, status: STEP_PENDING });
+        }
+        let held = token::Client::new(&env, &cfg.token).balance(&env.current_contract_address());
+        if held - st.reserved < total {
+            return Err(Error::InsufficientBalance);
+        }
+        st.reserved += total;
+        env.storage().instance().set(&DataKey::State, &st);
+        let id: u64 = env.storage().instance().get(&DataKey::NextPlan).unwrap_or(1);
+        env.storage().instance().set(&DataKey::NextPlan, &(id + 1));
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND);
+        env.storage().persistent().set(&DataKey::Plan(id), &out);
+        env.storage().persistent().extend_ttl(&DataKey::Plan(id), TTL_THRESHOLD, TTL_EXTEND);
+        PlanOpened { plan_id: id, total }.publish(&env);
+        Ok(id)
+    }
+
+    /// Releases one step to its provider. The provider AND the patient must both sign, and earlier steps must be done.
+    pub fn confirm_step(env: Env, plan_id: u64, index: u32) -> Result<(), Error> {
+        let cfg = Self::config(&env);
+        let key = DataKey::Plan(plan_id);
+        let mut steps: Vec<Step> = env.storage().persistent().get(&key).ok_or(Error::PlanNotFound)?;
+        let mut step = steps.get(index).ok_or(Error::StepNotFound)?;
+        step.merchant.require_auth();
+        cfg.beneficiary.require_auth();
+        if step.status != STEP_PENDING {
+            return Err(Error::StepNotPending);
+        }
+        for i in 0..index {
+            if steps.get(i).unwrap().status == STEP_PENDING {
+                return Err(Error::OutOfOrder);
+            }
+        }
+        let mut st = Self::state(&env);
+        if st.frozen {
+            return Err(Error::Frozen);
+        }
+        let registry = RegistryClient::new(&env, &cfg.registry);
+        if registry.category_of(&step.merchant).is_none() {
+            return Err(Error::NotWhitelisted);
+        }
+        st.reserved -= step.amount;
+        env.storage().instance().set(&DataKey::State, &st);
+        step.status = STEP_DONE;
+        steps.set(index, step.clone());
+        env.storage().persistent().set(&key, &steps);
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND);
+        token::Client::new(&env, &cfg.token).transfer(&env.current_contract_address(), &step.merchant, &step.amount);
+        StepConfirmed { plan_id, index, merchant: step.merchant, amount: step.amount }.publish(&env);
+        Ok(())
+    }
+
+    /// Cancels the steps that haven't been released and unlocks their money.
+    pub fn cancel_plan(env: Env, plan_id: u64) -> Result<(), Error> {
+        let cfg = Self::config(&env);
+        cfg.sponsor.require_auth();
+        let key = DataKey::Plan(plan_id);
+        let mut steps: Vec<Step> = env.storage().persistent().get(&key).ok_or(Error::PlanNotFound)?;
+        let mut back: i128 = 0;
+        for i in 0..steps.len() {
+            let mut s = steps.get(i).unwrap();
+            if s.status == STEP_PENDING {
+                back += s.amount;
+                s.status = STEP_CANCELLED;
+                steps.set(i, s);
+            }
+        }
+        let mut st = Self::state(&env);
+        st.reserved -= back;
+        env.storage().instance().set(&DataKey::State, &st);
+        env.storage().persistent().set(&key, &steps);
+        PlanCancelled { plan_id, released_back: back }.publish(&env);
         Ok(())
     }
 
@@ -190,9 +333,17 @@ impl Pass {
     pub fn is_frozen(env: Env) -> bool {
         Self::state(&env).frozen
     }
-    pub fn spent_in_window(env: Env) -> i128 {
-        let st = Self::state(&env);
-        Self::window(&env, &st).1
+    /// Money locked for care-plan steps that haven't been released.
+    pub fn reserved(env: Env) -> i128 {
+        Self::state(&env).reserved
+    }
+    /// What the vault holds that is not locked for a plan.
+    pub fn available(env: Env) -> i128 {
+        let cfg = Self::config(&env);
+        token::Client::new(&env, &cfg.token).balance(&env.current_contract_address()) - Self::state(&env).reserved
+    }
+    pub fn plan(env: Env, plan_id: u64) -> Result<Vec<Step>, Error> {
+        env.storage().persistent().get(&DataKey::Plan(plan_id)).ok_or(Error::PlanNotFound)
     }
     pub fn balance(env: Env) -> i128 {
         token::Client::new(&env, &Self::config(&env).token).balance(&env.current_contract_address())
@@ -207,21 +358,12 @@ impl Pass {
         env.storage().instance().get(&DataKey::State).unwrap()
     }
     fn validate(r: &Rules) -> Result<(), Error> {
-        if r.monthly_limit <= 0 || r.per_tx_limit <= 0 || r.per_tx_limit > r.monthly_limit || r.allowed_mask == 0 || r.allowed_mask >= 1 << 5 {
+        if r.allowed_mask == 0 || r.allowed_mask >= 1 << 5 {
             return Err(Error::InvalidRules);
         }
         Ok(())
     }
-    /// Effective (window_start, spent) now: a fresh window opens once 30 days have passed.
-    fn window(env: &Env, st: &State) -> (u64, i128) {
-        let now = env.ledger().timestamp();
-        if now >= st.window_start.saturating_add(WINDOW_SECS) {
-            (now, 0)
-        } else {
-            (st.window_start, st.spent)
-        }
-    }
-    /// Rule order mirrors the app's guardrail lab: pass → merchant → care type → cap → monthly → balance.
+    /// Rule order mirrors the app: pass → merchant → care type → balance.
     fn evaluate(env: &Env, merchant: &Address, amount: i128) -> Result<(), Error> {
         if amount <= 0 {
             return Err(Error::InvalidAmount);
@@ -238,14 +380,7 @@ impl Pass {
         if category >= 32 || rules.allowed_mask & (1u32 << category) == 0 {
             return Err(Error::CategoryNotAllowed);
         }
-        if amount > rules.per_tx_limit {
-            return Err(Error::OverPaymentCap);
-        }
-        let (_, spent) = Self::window(env, &st);
-        if spent + amount > rules.monthly_limit {
-            return Err(Error::OverMonthlyLimit);
-        }
-        if token::Client::new(env, &cfg.token).balance(&env.current_contract_address()) < amount {
+        if token::Client::new(env, &cfg.token).balance(&env.current_contract_address()) - st.reserved < amount {
             return Err(Error::InsufficientBalance);
         }
         Ok(())

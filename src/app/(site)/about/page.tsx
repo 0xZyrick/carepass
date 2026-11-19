@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 const ICON = { stellar: Globe2, soroban: Blocks, yellowcard: Banknote, ramp: Landmark } as const;
 
 const LAYERS = [
-  ["Healthcare", "Verified providers", "Hospitals, labs and pharmacies register, are checked, and get a QR code. Only these can be paid. Families see care, not cash."],
-  ["Fintech", "Cards and bank in, Naira out", "Sponsors in the US and UK pay by card or bank through a licensed checkout. Clinics are paid in Naira through a licensed payout partner."],
+  ["Healthcare", "Care plans, confirmed by providers", "Families choose a care plan, such as antenatal care or a health check-up, and a verified clinic for each step. The clinic confirms each visit with a code, and only then is that step paid. Sponsors see progress, never medical records."],
+  ["Fintech", "USDC in, Naira out", "Sponsors in the US and UK fund a pass with USDC through a Stellar anchor, a regulated on-ramp that works the same way on every Stellar wallet. Clinics are paid from the pass on-chain and cash out to Naira through a licensed payout partner."],
   ["Blockchain", "Rules that can't be bypassed", "Money is held as digital dollars on the Stellar network, and a smart contract allows payments only to verified providers within the sponsor's limits. The sponsor stays in control, and no one, including CarePass, can redirect the money."],
 ];
 
@@ -22,7 +22,7 @@ export default function About() {
     <div className="container-x pb-24 pt-12 lg:pt-16">
       <div className="eyebrow">How it's built</div>
       <h1 className="mt-3 max-w-3xl text-balance font-display text-[40px] font-semibold leading-[1.05] sm:text-6xl">Healthcare, payments and blockchain, in one simple product.</h1>
-      <p className="mt-5 max-w-2xl text-lg leading-relaxed text-ink-soft">Families abroad send billions home every year, and a large share of it pays for healthcare. Cash arrives with no guarantee it reaches care. CarePass turns that transfer into a payment that can only go to a verified provider.</p>
+      <p className="mt-5 max-w-2xl text-lg leading-relaxed text-ink-soft">Families abroad send billions home every year, and a large share of it pays for healthcare. Cash arrives with no guarantee it reaches care, and no way to see whether the care happened. CarePass turns that transfer into a care plan: the right steps at a verified provider, confirmed by the clinic, and paid only when the visit takes place.</p>
 
       <section className="mt-16">
         <h2 className="font-display text-3xl font-semibold">Three layers</h2>
@@ -53,7 +53,7 @@ export default function About() {
 
       <section className="mt-20 rounded-3xl bg-white p-6 shadow-card sm:p-8">
         <h2 className="font-display text-3xl font-semibold">Where it stands</h2>
-        <p className="mt-3 max-w-2xl leading-relaxed text-ink-soft">The full product works today in test mode: accounts, family passes, spending rules, card checkout, QR payments at clinics, PINs and activity. It runs on the Stellar test network and a payment-partner sandbox, so no real money moves. Going live means switching to production keys and completing partner onboarding and a contract security review. The product itself doesn't change.</p>
+        <p className="mt-3 max-w-2xl leading-relaxed text-ink-soft">The full product works today in test mode: accounts, family passes, spending rules, Stellar USDC funding, QR payments at clinics, PINs and activity. It runs on the Stellar test network and a Stellar test anchor, so no real money moves. Going live means switching to production keys and completing partner onboarding and a contract security review. The product itself doesn't change.</p>
       </section>
 
       <div className="mt-12 flex flex-col gap-3 sm:flex-row">

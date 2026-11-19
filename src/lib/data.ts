@@ -56,13 +56,13 @@ export interface Beneficiary {
   initials: string;
   hue: Hue;
   balance: number;
-  monthlyLimit: number;
-  perTxLimit: number;
   allowed: Category[];
   frozen: boolean;
   last4: string;
   lastActive: string;
   lastActiveAt?: string | null;
+  /** money locked for care-plan steps that haven't been released (already left out of balance) */
+  locked?: number;
 }
 
 export type TxKind = "topup" | "payment" | "blocked";
@@ -79,6 +79,8 @@ export interface Tx {
   ref: string;
   method?: string;
   chainTx?: string;
+  receiptHash?: string;
+  settled?: boolean;
   at?: string;
 }
 
@@ -94,12 +96,12 @@ export interface TopupRequest {
 export const SEED_BENEFICIARIES: Beneficiary[] = [
   {
     id: "mom", name: "Adebola", fullName: "Adebola Okonkwo", relation: "Mom", phone: "+234 802 555 0142",
-    city: "Lagos", initials: "AO", hue: "brand", balance: 186.4, monthlyLimit: 300, perTxLimit: 150,
+    city: "Lagos", initials: "AO", hue: "brand", balance: 186.4,
     allowed: ["hospital", "lab", "pharmacy"], frozen: false, last4: "8842", lastActive: "2 days ago",
   },
   {
     id: "sister", name: "Chioma", fullName: "Chioma Okonkwo", relation: "Sister", phone: "+234 809 555 0197",
-    city: "Abuja", initials: "CO", hue: "iris", balance: 226.4, monthlyLimit: 250, perTxLimit: 120,
+    city: "Abuja", initials: "CO", hue: "iris", balance: 226.4,
     allowed: ["hospital", "lab", "pharmacy", "dental"], frozen: false, last4: "3017", lastActive: "5 days ago",
   },
 ];

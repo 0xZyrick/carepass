@@ -23,7 +23,7 @@ export default function NewFamily() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState<"Lagos" | "Abuja">("Lagos");
-  const [rules, setRules] = useState<Rules>({ monthlyLimit: 250, perTxLimit: 100, allowed: ["hospital", "lab", "pharmacy"] });
+  const [rules, setRules] = useState<Rules>({ allowed: ["hospital", "lab", "pharmacy"] });
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Beneficiary | null>(null);
   const [touched, setTouched] = useState(false);
@@ -99,7 +99,7 @@ export default function NewFamily() {
         )}
         {step === 1 && (
           <>
-            <h1 className="font-display text-3xl font-semibold sm:text-4xl">Set spending rules</h1>
+            <h1 className="font-display text-3xl font-semibold sm:text-4xl">Choose the kinds of care</h1>
             <p className="mb-8 mt-2 text-ink-mute">You can change these any time. Defaults suit most families.</p>
             <div className="card p-5 sm:p-7"><RulesEditor rules={rules} onChange={setRules} /></div>
             <Button size="lg" full className="mt-8" onClick={() => setStep(2)}>Continue <ArrowRight className="h-5 w-5" /></Button>
@@ -111,7 +111,7 @@ export default function NewFamily() {
             <p className="mb-8 mt-2 text-ink-mute">Check everything looks right.</p>
             <div className="mx-auto mb-6 max-w-[340px]"><PassCard name={fullName || "Family member"} balance={0} last4="••••" hue="brand" compact /></div>
             <dl className="divide-y divide-line rounded-3xl border border-line bg-white text-sm shadow-card">
-              {[["Name", fullName], ["Relationship", relation], ["Email", email], ["Mobile", phone || "—"], ["City", city], ["Monthly limit", `$${rules.monthlyLimit}`], ["Most per payment", `$${rules.perTxLimit}`], ["Care types", rules.allowed.join(", ")]].map(([k, v]) => (
+              {[["Name", fullName], ["Relationship", relation], ["Email", email], ["Mobile", phone || "—"], ["City", city], ["Care types", rules.allowed.join(", ")]].map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-6 px-5 py-3.5"><dt className="text-ink-mute">{k}</dt><dd className="text-right font-semibold capitalize">{v}</dd></div>
               ))}
             </dl>
